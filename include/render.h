@@ -20,10 +20,12 @@ public:
     void update(const VocabFile& vf, int current_line_idx, int current_field,
                 const LineBuf& current,
                 State::Side active_side,    // which side of the pair to show
+                bool alternate_mode,        // direction mode 3 indicator
                 bool show_answer,          // R held → also show the other side
                 bool field_is_empty);      // current box has no words
 
     void update_browser(const State& state);
+    void update_shuffle_confirm(int current_field);
 
     // Show/hide the short save indicator in the top-right corner.
     void set_saving(bool saving);
@@ -38,14 +40,18 @@ private:
     // Two text generators: one for the small UI text, one for
     // the flashcard words using the SuperFW/UnSCI 8x16 font.
     bn::sprite_text_generator small_gen;
-    bn::sprite_text_generator big_gen;
-    bn::sprite_text_generator cyrillic_gen;
+    bn::sprite_text_generator latin_gen;
+    bn::sprite_text_generator greek_cyrillic_gen;
+    bn::sprite_text_generator japanese_gen;
+    bn::sprite_text_generator cjk_gen;
+    bn::sprite_text_generator hangul_gen;
     bn::sprite_text_generator multilang_gen;
     bn::vector<bn::sprite_ptr, 256> text_sprites;
 
     int last_line_idx;
     int last_field;
     State::Side last_active_side;
+    bool last_alternate_mode;
     bool last_show_answer;
     bool last_field_is_empty;
     int last_counts[5];
@@ -56,6 +62,6 @@ private:
 
     void render_full(const VocabFile& vf, int current_line_idx, int current_field,
                      const LineBuf& current,
-                     State::Side active_side, bool show_answer,
+                     State::Side active_side, bool alternate_mode, bool show_answer,
                      bool field_is_empty);
 };

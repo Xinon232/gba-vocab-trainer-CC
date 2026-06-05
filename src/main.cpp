@@ -54,6 +54,27 @@ static bool load_selected_vocab(const char* filename)
                            VOCAB_FILE_BUFFER_LEN, g_builtin_vocab_used);
 }
 
+static int grouped_save_index_for_line(const VocabFile& vf, int old_idx)
+{
+    if (old_idx < 0 || old_idx >= vf.line_count) {
+        return -1;
+    }
+
+    uint8_t field = vf.field[old_idx];
+    if (field < 1 || field > 5) {
+        return -1;
+    }
+
+    int new_idx = 0;
+    for (int i = 0; i < vf.line_count; ++i) {
+        uint8_t candidate_field = vf.field[i];
+        if (candidate_field < field || (candidate_field == field && i < old_idx)) {
+            ++new_idx;
+        }
+    }
+    return new_idx;
+}
+
 static State::InputState read_input()
 {
     State::InputState in;
@@ -76,17 +97,21 @@ static void render_current_frame(Renderer& renderer, State& state)
         renderer.update_browser(state);
         return;
     }
+    if (state.shuffle_confirm_active()) {
+        renderer.update_shuffle_confirm(state.current_field());
+        return;
+    }
 
     int idx = state.current_line_idx();
     if (idx < 0 || idx >= g_vocab_file.line_count) idx = 0;
 
     LineBuf current;
-    bool field_empty = state.current_field_is_empty(g_vocab_file);
+    bool field_empty = !state.feedback_active() && state.current_field_is_empty(g_vocab_file);
     if (vocab_file_show(g_vocab_file, g_builtin_vocab, g_builtin_vocab_used,
                         idx, current) || field_empty) {
         renderer.update(g_vocab_file, idx, state.current_field(),
-                        current, state.active_side(), state.show_answer(),
-                        field_empty);
+                        current, state.active_side(), state.direction_mode() == 3,
+                        state.show_answer(), field_empty);
     }
 }
 
@@ -107,14 +132,25 @@ int main()
         State::InputState in = read_input();
         state.update(g_vocab_file, in);
 
-        if (in.start_pressed) {
+        if (in.start_pressed && state.scene() == 0) {
+            int grouped_idx_after_save = -1;
+            int idx_before_save = state.current_line_idx();
+            if (vocab_file_loaded_from_sd() &&
+                idx_before_save >= 0 && idx_before_save < g_vocab_file.line_count &&
+                !state.current_field_is_empty(g_vocab_file)) {
+                grouped_idx_after_save = grouped_save_index_for_line(g_vocab_file, idx_before_save);
+            }
+
             renderer.set_saving(true);
             render_current_frame(renderer, state);
             bn::core::update();
 
-            vocab_file_save_grouped(g_vocab_file, g_builtin_vocab, g_builtin_vocab_used,
-                                    g_export_buffer, VOCAB_EXPORT_BUFFER_LEN,
-                                    g_export_buffer_used);
+            bool saved = vocab_file_save_grouped(g_vocab_file, g_builtin_vocab, g_builtin_vocab_used,
+                                                 g_export_buffer, VOCAB_EXPORT_BUFFER_LEN,
+                                                 g_export_buffer_used);
+            if (saved && grouped_idx_after_save >= 0) {
+                state.restore_current_line_index(g_vocab_file, grouped_idx_after_save);
+            }
 
             renderer.set_saving(false);
             renderer.reset();

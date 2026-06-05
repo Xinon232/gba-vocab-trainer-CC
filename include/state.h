@@ -23,6 +23,7 @@
 //   L: tap            → cycle direction_mode 1→2→3→1
 //   D-pad Left/Right: switch between boxes (fields), including empty ones
 //   D-pad Up:         undo the most recent A/B press (one-shot).
+//   D-pad Down:       ask to shuffle only the current box; A confirms, B cancels.
 //   START: save .txt back to disk (Step 6 stub: clears dirty flags)
 //   SELECT: file browser (Step 6, stub for now)
 //
@@ -78,6 +79,13 @@ public:
     bool show_answer() const { return show_answer_; }
     int scene() const { return scene_; }
     bool undo_pending() const { return undo_pending_; }
+    bool shuffle_confirm_active() const { return scene_ == 2; }
+    bool feedback_active() const { return scene_ == 3; }
+
+    // After saving to SD the file is rewritten grouped by field and then
+    // re-opened, so numeric line indexes can point at different words.
+    // Restore to a precomputed line index in the new grouped order.
+    bool restore_current_line_index(const VocabFile& vf, int line_idx);
 
     bool current_field_is_empty(const VocabFile& vf) const;
 
@@ -115,9 +123,20 @@ private:
     int browse_top_;
     bool load_request_pending_;
     int load_request_index_;
+    int last_line_by_field_[5];
+    uint32_t shuffle_seed_;
+    int feedback_frames_left_;
+
+    // Feedback scene: after A/B, keep the pressed card visible with
+    // answer shown during the green/red flash. Only after the flash
+    // expires do we advance to the next word and toggle alternation.
+    int feedback_line_idx_;
+    bool feedback_toggle_alternation_;
 
     // Undo state. Single-shot. Stored only if the most recent A/B
-    // press actually changed a field. Cleared by any action that
+    // press should be undoable. For B in field 1 the field does not
+    // change, but undo still returns to the word that was advanced past.
+    // Cleared by any action that
     // changes which field the user is browsing (D-pad L/R to a new
     // box), or by a successful undo. The undo restores the field of
     // the changed word and jumps the display back to that word so
@@ -134,8 +153,13 @@ private:
 
     void clear_undo() { undo_pending_ = false; }
 
+    void remember_current_line_for_field(const VocabFile& vf);
+    void restore_current_line_for_field(const VocabFile& vf);
+    void set_current_line_for_field(const VocabFile& vf, int line_idx);
     void find_next_word_in_field(const VocabFile& vf);
+    void finish_feedback(VocabFile& vf);
     void jump_to_next_field(const VocabFile& vf);
     void jump_to_prev_field(const VocabFile& vf);
+    void shuffle_current_field(VocabFile& vf);
 };
 
