@@ -66,7 +66,7 @@ The ROM output is `vocab.gba`.
 
 ## Notes
 
-This is an early public source snapshot. It is useful for experimentation and for testing dict.cc vocabulary files on GBA hardware, but it is not a polished release yet.
+Polished release. Fonts for Right-to-Left Languages are still missing.
 
 ### Credits
 
