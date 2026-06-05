@@ -1,4 +1,4 @@
-# GBA Vocab Trainer
+# GBA Vocab Trainer CC
 
 A simple 5-box vocabulary trainer for the Game Boy Advance, built with Butano and targeted at SuperFW / Supercard SD-style setups.
 
