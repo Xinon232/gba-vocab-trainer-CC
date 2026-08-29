@@ -8,7 +8,6 @@
 #include "bn_keypad.h"
 
 #include "vocab.h"
-#include "sav.h"
 #include "render.h"
 #include "state.h"
 #include "vocab_file_io.h"
@@ -21,26 +20,6 @@ BN_DATA_EWRAM_BSS char g_builtin_vocab[VOCAB_FILE_BUFFER_LEN];
 BN_DATA_EWRAM_BSS char g_export_buffer[VOCAB_EXPORT_BUFFER_LEN];
 BN_DATA_EWRAM_BSS int g_builtin_vocab_used = 0;
 BN_DATA_EWRAM_BSS int g_export_buffer_used = 0;
-
-static void step3_savestate_init()
-{
-    Savestate sav;
-    bool sav_valid = sav_load(sav);
-    if (sav_valid) {
-        sav_save(sav);
-    } else {
-        Savestate defaults;
-        memset(&defaults, 0, sizeof(defaults));
-        defaults.last_field = 1;
-        defaults.last_line = 0;
-        const char* default_name = "builtin.txt";
-        for (int i = 0; default_name[i] && i < SAV_FILENAME_MAX - 1; i++) {
-            defaults.filename[i] = (uint8_t)default_name[i];
-        }
-        defaults.filename[SAV_FILENAME_MAX - 1] = 0;
-        sav_save(defaults);
-    }
-}
 
 static void load_builtin_vocab()
 {
@@ -121,7 +100,6 @@ int main()
 {
     bn::core::init();
 
-    step3_savestate_init();
     vocab_file_init();
     load_builtin_vocab();
 
@@ -143,7 +121,7 @@ int main()
                 grouped_idx_after_save = grouped_save_index_for_line(g_vocab_file, idx_before_save);
             }
 
-            renderer.set_saving(true);
+            renderer.set_save_status(SaveStatus::SAVING);
             render_current_frame(renderer, state);
             bn::core::update();
 
@@ -154,7 +132,7 @@ int main()
                 state.restore_current_line_index(g_vocab_file, grouped_idx_after_save);
             }
 
-            renderer.set_saving(false);
+            renderer.set_save_status(saved ? SaveStatus::IDLE : SaveStatus::FAILED);
             renderer.reset();
         }
 

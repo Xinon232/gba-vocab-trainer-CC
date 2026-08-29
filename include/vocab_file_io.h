@@ -73,6 +73,18 @@ bool vocab_file_sidecar_name_for_tests(const char* original, const char* suffix,
 void vocab_file_cache_reset_stats_for_tests();
 int vocab_file_cache_misses_for_tests();
 
+// Host lifecycle regression for the persistent SD source handle: repeated card
+// transitions reuse one open, while save closes and then reopens it.
+VocabIoStats vocab_file_persistent_source_for_tests();
+bool vocab_file_close_failure_keeps_source_open_for_tests();
+
+// Simulate the post-commit reopen boundary. Even when reopening fails, the
+// in-memory offsets must already describe the committed replacement and must
+// not remain dirty/retryable against the regrouped TXT.
+bool vocab_file_finalize_committed_save_for_tests(VocabFile& live,
+                                                   const VocabFile& reindexed,
+                                                   bool reopen_succeeds);
+
 // Run the same chunked sequential scanner used by FatFS against a host memory
 // source. This keeps buffer-boundary and call-count regressions testable.
 int vocab_file_scan_buffered_for_tests(const char* data, int data_len, int chunk_size,

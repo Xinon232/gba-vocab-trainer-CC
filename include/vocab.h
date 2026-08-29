@@ -6,9 +6,8 @@
 //   - field[N]         : current field 1..5 for each word
 //   - dirty[N/8]       : bitset, which lines changed since last save
 //   - field_counts[5]  : how many words in each field
-//   - current_line_buf : 256B scratch for stream-read one line
 //
-// Showing a word: f_lseek(line_offsets[i]) + f_read into current_line_buf
+// Showing a word: use line_offsets[i] to seek/read one bounded row.
 // Saving: rewrite the .txt, updating each line with its current field
 //         (or the new field for changed lines).
 //
@@ -59,9 +58,6 @@ struct VocabFile {
     // 5 × 2 bytes = 10 bytes
     uint16_t field_counts[5];
 
-    // 256 bytes — scratch for stream-read of one line
-    char current_line_buf[256];
-
     int line_count;       // number of valid lines (≤ VOCAB_MAX_LINES)
     bool loaded;          // true after a successful vocab_open
 
@@ -83,7 +79,6 @@ struct VocabFile {
         for (int i = 0; i < 5; i++) {
             field_counts[i] = 0;
         }
-        current_line_buf[0] = 0;
     }
 };
 

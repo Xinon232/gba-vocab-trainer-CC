@@ -1,5 +1,7 @@
 # v0.2.3 file-I/O architecture
 
+> Historical note: the persistent-handle decision below describes v0.2.3. v0.2.6 retains one buffered source handle; see `file-io-v0.2.6.md`.
+
 ## Scope
 
 This release keeps the existing bounded streaming architecture and dict.cc-compatible five-field format. It does not store complete imported files in RAM and does not change controls, fonts, rendering, shuffle/undo semantics, or Leitner rules.
@@ -47,7 +49,7 @@ This is a recoverable transaction design, not a claim of guaranteed power-loss s
 
 ### Persistent source handle
 
-Not retained. The current-card cache removes all unchanged-frame opens, so a persistent `FIL` would benefit transitions only while adding close/reopen obligations across save, rename, file switch, remount, media errors, and recovery. With `FF_FS_TINY=0`, it also reserves another 512-byte per-file FatFS buffer. Actual Supercard timing is required before accepting that complexity.
+v0.2.3 deliberately did not retain one: the current-card cache removed unchanged-frame opens, while a persistent `FIL` added close/reopen obligations around replacement and recovery. v0.2.6 adds that lifecycle explicitly: one buffered read handle remains open across card transitions, closes before file switches or replacement, and reopens only after the validated replacement index is installed.
 
 ### FatFS fast seek
 

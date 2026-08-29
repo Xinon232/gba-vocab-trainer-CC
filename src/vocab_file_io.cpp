@@ -59,6 +59,24 @@ static void begin_loaded_file_generation()
     invalidate_card_cache();
 }
 
+template<typename OpenFn>
+static bool ensure_source_open(bool& is_open, OpenFn open_fn)
+{
+    if (is_open) return true;
+    if (!open_fn()) return false;
+    is_open = true;
+    return true;
+}
+
+template<typename CloseFn>
+static bool close_source(bool& is_open, CloseFn close_fn)
+{
+    if (!is_open) return true;
+    const bool ok = close_fn();
+    if (ok) is_open = false;
+    return ok;
+}
+
 void vocab_file_cache_reset_stats_for_tests()
 {
     s_card_cache_misses = 0;
@@ -69,6 +87,53 @@ int vocab_file_cache_misses_for_tests()
 {
     return s_card_cache_misses;
 }
+
+template<typename ReopenFn>
+static bool finalize_committed_save(VocabFile& live, const VocabFile& reindexed,
+                                    ReopenFn reopen_fn)
+{
+    // The replacement is already the authoritative TXT. Install its validated
+    // offsets before reopening so a transient reopen failure can never make a
+    // retry apply old offsets to the newly grouped file.
+    live = reindexed;
+    vocab_clear_dirty(live);
+    live.array_generation = 0;
+    begin_loaded_file_generation();
+    return reopen_fn();
+}
+
+#ifndef __DEVKITARM__
+bool vocab_file_close_failure_keeps_source_open_for_tests()
+{
+    bool open = true;
+    bool closed = close_source(open, []() { return false; });
+    return !closed && open;
+}
+
+bool vocab_file_finalize_committed_save_for_tests(VocabFile& live,
+                                                   const VocabFile& reindexed,
+                                                   bool reopen_succeeds)
+{
+    return finalize_committed_save(live, reindexed,
+                                   [reopen_succeeds]() { return reopen_succeeds; });
+}
+
+VocabIoStats vocab_file_persistent_source_for_tests()
+{
+    VocabIoStats stats = {};
+    bool open = false;
+    auto open_source = [&stats]() { ++stats.file_opens; return true; };
+    auto close_source_fn = [&stats]() { ++stats.closes; return true; };
+
+    ensure_source_open(open, open_source);  // load
+    ensure_source_open(open, open_source);  // first card
+    ensure_source_open(open, open_source);  // transition
+    ensure_source_open(open, open_source);  // another transition
+    close_source(open, close_source_fn);    // replacement save
+    ensure_source_open(open, open_source);  // reopen saved source
+    return stats;
+}
+#endif
 
 template<typename Ops>
 static bool run_replacement_transaction(Ops& ops)
@@ -82,7 +147,12 @@ static bool run_replacement_transaction(Ops& ops)
         if (ops.park_failed_replacement()) ops.restore_backup();
         return false;
     }
-    return ops.remove_backup();
+    // The replacement has already been validated and is now the authoritative
+    // TXT. Failure to remove the backup is a recoverable cleanup condition, not
+    // a failed save: treating it as retryable would apply stale offsets to the
+    // newly grouped file. Startup/reload recovery removes a leftover backup.
+    ops.remove_backup();
+    return true;
 }
 
 #ifndef __DEVKITARM__
@@ -162,6 +232,8 @@ VocabTransactionTestResult vocab_file_transaction_for_tests(VocabIoFailurePoint 
 
 #ifdef __DEVKITARM__
 static FATFS s_fatfs;
+BN_DATA_EWRAM_BSS static FIL s_loaded_source;
+static bool s_loaded_source_open = false;
 // Save-only reindex scratch: bounded metadata (offsets/fields/dirty/counts), not
 // vocabulary text. Keeping it static places it in normal EWRAM/BSS rather than
 // on the small GBA stack and preserves the live dirty state if reindex fails.
@@ -179,6 +251,21 @@ static FRESULT tracked_close(FIL* fp)
 {
     ++s_io_stats.closes;
     return f_close(fp);
+}
+
+static bool ensure_loaded_source_open()
+{
+    return ensure_source_open(s_loaded_source_open, []() {
+        return tracked_open(&s_loaded_source, s_loaded_name,
+                            FA_READ | FA_OPEN_EXISTING) == FR_OK;
+    });
+}
+
+static bool close_loaded_source()
+{
+    return close_source(s_loaded_source_open, []() {
+        return tracked_close(&s_loaded_source) == FR_OK;
+    });
 }
 
 static FRESULT tracked_seek(FIL* fp, FSIZE_t offset)
@@ -626,6 +713,10 @@ static bool open_sd_streaming(const char* filename, VocabFile& vf)
 {
     if (!scan_sd_index(filename, vf)) return false;
     set_loaded_name(filename);
+    if (!ensure_loaded_source_open()) {
+        vf.reset();
+        return false;
+    }
     s_loaded_from_sd = true;
     return true;
 }
@@ -683,6 +774,11 @@ static bool recover_sd_sidecars(const char* filename)
 bool vocab_file_load(const char* filename, VocabFile& vf,
                      char* fallback_buf, int fallback_len, int& fallback_used)
 {
+#ifdef __DEVKITARM__
+    // File switches and recovery never leave an old handle attached to a path
+    // that may be renamed or replaced.
+    if (!close_loaded_source()) return false;
+#endif
     // Every load attempt, including a same-name reload, starts a new source
     // identity so no parsed card can leak across file generations.
     begin_loaded_file_generation();
@@ -759,17 +855,16 @@ bool vocab_file_show(const VocabFile& vf, const char* fallback_buf, int fallback
     bool ok = false;
 #ifdef __DEVKITARM__
     if (s_loaded_from_sd) {
-        FIL fp;
-        if (tracked_open(&fp, s_loaded_name, FA_READ | FA_OPEN_EXISTING) != FR_OK) {
+        if (!ensure_loaded_source_open()) {
             invalidate_card_cache();
             return false;
         }
         char line[VOCAB_RAW_LINE_MAX];
         int line_len = 0;
-        if (read_bounded_raw_line(fp, source_offset, line, sizeof(line), line_len)) {
+        if (read_bounded_raw_line(s_loaded_source, source_offset, line,
+                                  sizeof(line), line_len)) {
             ok = parse_line_into(line, line_len, parsed);
         }
-        tracked_close(&fp);
     } else
 #endif
     {
@@ -907,30 +1002,36 @@ static bool save_sd_grouped(VocabFile& vf)
     if (!make_sidecar_name(s_loaded_name, ".tmp", tmp_name) ||
         !make_sidecar_name(s_loaded_name, ".bak", bak_name)) return false;
 
-    if (!recover_sd_sidecars(s_loaded_name)) return false;
+    if (!close_loaded_source()) return false;
+    auto fail_and_reopen = []() {
+        ensure_loaded_source_open();
+        return false;
+    };
+
+    if (!recover_sd_sidecars(s_loaded_name)) return fail_and_reopen();
 
     // Recovery removes sidecars only after proving a structurally valid original.
-    if (path_exists(tmp_name) || path_exists(bak_name)) return false;
+    if (path_exists(tmp_name) || path_exists(bak_name)) return fail_and_reopen();
 
     if (!write_sd_grouped_temp(vf, tmp_name)) {
         // The original is still present, so this known-incomplete temp is safe
         // to remove. Failure to remove it is conservative and blocks retry.
         tracked_unlink(tmp_name);
-        return false;
+        return fail_and_reopen();
     }
 
     FatFsReplacementOps replacement(s_loaded_name, tmp_name, bak_name);
     if (!run_replacement_transaction(replacement)) {
         invalidate_card_cache();
-        return false;
+        return fail_and_reopen();
     }
 
-    vf = s_reindex_scratch;
+    // Reopening is part of the user-visible result, but the replacement has
+    // already committed. Install the validated index first so a failed reopen
+    // cannot leave retryable old offsets targeting the regrouped TXT.
     s_loaded_from_sd = true;
-    vocab_clear_dirty(vf);
-    vf.array_generation = 0;
-    begin_loaded_file_generation();
-    return true;
+    return finalize_committed_save(vf, s_reindex_scratch,
+                                   []() { return ensure_loaded_source_open(); });
 }
 #endif
 

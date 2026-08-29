@@ -8,6 +8,7 @@
 #include "bn_sprite_text_generator.h"
 
 #include "vocab.h"
+#include "save_status.h"
 #include "state.h"  // for State::Side enum
 
 class Renderer {
@@ -28,8 +29,8 @@ public:
     void update_browser(const State& state);
     void update_shuffle_confirm(int current_field);
 
-    // Show/hide the short save indicator in the top-right corner.
-    void set_saving(bool saving);
+    // Show save progress or a persistent failure indicator.
+    void set_save_status(SaveStatus status);
 
     // Trigger a flash. flash_green() = A press. flash_red() = B press.
     void flash_green();
@@ -56,8 +57,8 @@ private:
     bool last_show_answer;
     bool last_field_is_empty;
     int last_counts[5];
-    bool saving_visible;
-    bool last_saving_visible;
+    SaveStatus save_status;
+    SaveStatus last_save_status;
     int flash_timer_frames;
     int flash_color;  // 0 = none, 1 = green, 2 = red
 

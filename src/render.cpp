@@ -219,11 +219,12 @@ void generate_wrapped_big(bn::sprite_text_generator& gen, int base_y, const char
     }
 }
 
-void generate_save_indicator(bn::sprite_text_generator& gen,
-                             bn::vector<bn::sprite_ptr, 256>& sprites)
+static void generate_save_indicator(bn::sprite_text_generator& gen,
+                                    bn::vector<bn::sprite_ptr, 256>& sprites,
+                                    SaveStatus status)
 {
     gen.set_right_alignment();
-    gen.generate(SAVE_X, SAVE_Y, "save...", sprites);
+    gen.generate(SAVE_X, SAVE_Y, save_status_text(status), sprites);
     gen.set_center_alignment();
 }
 
@@ -244,8 +245,8 @@ Renderer::Renderer()
       last_show_answer(false),
       last_field_is_empty(false),
       last_counts{-1, -1, -1, -1, -1},
-      saving_visible(false),
-      last_saving_visible(false),
+      save_status(SaveStatus::IDLE),
+      last_save_status(SaveStatus::IDLE),
       flash_timer_frames(0),
       flash_color(0)
 {
@@ -269,16 +270,16 @@ void Renderer::reset() {
     last_show_answer = false;
     last_field_is_empty = false;
     for (int i = 0; i < 5; i++) last_counts[i] = -1;
-    last_saving_visible = !saving_visible;
+    last_save_status = save_status == SaveStatus::IDLE ? SaveStatus::FAILED : SaveStatus::IDLE;
     text_sprites.clear();
     flash_timer_frames = 0;
     flash_color = 0;
 }
 
-void Renderer::set_saving(bool saving) {
-    if (saving_visible != saving) {
-        saving_visible = saving;
-        last_saving_visible = !saving;
+void Renderer::set_save_status(SaveStatus status) {
+    if (save_status != status) {
+        save_status = status;
+        last_save_status = status == SaveStatus::IDLE ? SaveStatus::FAILED : SaveStatus::IDLE;
     }
 }
 
@@ -319,7 +320,7 @@ void Renderer::update(const VocabFile& vf, int current_line_idx, int current_fie
         alternate_mode != last_alternate_mode ||
         show_answer != last_show_answer ||
         field_is_empty != last_field_is_empty ||
-        saving_visible != last_saving_visible ||
+        save_status != last_save_status ||
         counts_changed) {
         render_full(vf, current_line_idx, current_field, current,
                     active_side, alternate_mode, show_answer, field_is_empty);
@@ -329,7 +330,7 @@ void Renderer::update(const VocabFile& vf, int current_line_idx, int current_fie
         last_alternate_mode = alternate_mode;
         last_show_answer = show_answer;
         last_field_is_empty = field_is_empty;
-        last_saving_visible = saving_visible;
+        last_save_status = save_status;
         for (int i = 0; i < 5; i++) last_counts[i] = vf.field_counts[i];
     }
 }
@@ -341,8 +342,8 @@ void Renderer::update_browser(const State& state)
 
     small_gen.generate(0, -64, "Select TXT file", text_sprites);
     small_gen.generate(0, -44, "A load   B cancel", text_sprites);
-    if (saving_visible) {
-        generate_save_indicator(small_gen, text_sprites);
+    if (save_status != SaveStatus::IDLE) {
+        generate_save_indicator(small_gen, text_sprites, save_status);
     }
 
     int top = state.browse_top();
@@ -441,8 +442,8 @@ void Renderer::render_full(const VocabFile& vf, int current_line_idx, int curren
     }
 
     // Footer: one label per field. Underline the box the user is browsing.
-    if (saving_visible) {
-        generate_save_indicator(small_gen, text_sprites);
+    if (save_status != SaveStatus::IDLE) {
+        generate_save_indicator(small_gen, text_sprites, save_status);
     }
 
     static constexpr int FOOTER_X[5] = { -96, -48, 0, 48, 96 };

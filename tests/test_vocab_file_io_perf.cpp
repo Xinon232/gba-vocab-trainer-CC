@@ -16,8 +16,7 @@ static int test_transaction_failures()
 {
     const VocabIoFailurePoint failures[] = {
         VOCAB_IO_FAIL_WRITE, VOCAB_IO_FAIL_CLOSE, VOCAB_IO_FAIL_BACKUP_RENAME,
-        VOCAB_IO_FAIL_REPLACEMENT_RENAME, VOCAB_IO_FAIL_REINDEX,
-        VOCAB_IO_FAIL_BACKUP_UNLINK
+        VOCAB_IO_FAIL_REPLACEMENT_RENAME, VOCAB_IO_FAIL_REINDEX
     };
     for (VocabIoFailurePoint failure : failures) {
         VocabTransactionTestResult result = vocab_file_transaction_for_tests(failure);
@@ -25,11 +24,37 @@ static int test_transaction_failures()
             return fail("failure injection lost dirty state/original");
         }
     }
+    VocabTransactionTestResult cleanup_failure =
+        vocab_file_transaction_for_tests(VOCAB_IO_FAIL_BACKUP_UNLINK);
+    if (!cleanup_failure.success || cleanup_failure.dirty ||
+        !cleanup_failure.original_valid || !cleanup_failure.backup_valid ||
+        cleanup_failure.temporary_valid) {
+        return fail("post-commit cleanup failure made saved state retry against stale offsets");
+    }
     VocabTransactionTestResult success =
         vocab_file_transaction_for_tests(VOCAB_IO_FAIL_NONE);
     if (!success.success || success.dirty || !success.original_valid ||
         success.backup_valid || success.temporary_valid || success.stats.renames != 2) {
         return fail("successful transaction invariant failed");
+    }
+
+    VocabFile live;
+    VocabFile reindexed;
+    live.reset();
+    reindexed.reset();
+    live.line_count = reindexed.line_count = 1;
+    live.loaded = reindexed.loaded = true;
+    live.line_offsets[0] = 12;
+    reindexed.line_offsets[0] = 345;
+    live.dirty[0] = 1;
+    live.array_generation = 7;
+    if (vocab_file_finalize_committed_save_for_tests(live, reindexed, false) ||
+        live.line_offsets[0] != 345 || vocab_any_dirty(live) ||
+        live.array_generation != 0) {
+        return fail("reopen failure left stale offsets or retryable dirty state after commit");
+    }
+    if (!vocab_file_close_failure_keeps_source_open_for_tests()) {
+        return fail("failed close marked a still-valid FatFS source handle closed");
     }
 
     char near_max[VOCAB_FILENAME_MAX];
@@ -94,6 +119,9 @@ int main()
 {
     if (test_transaction_failures()) return 1;
     if (test_structural_validator()) return 1;
+    if (sizeof(VocabFile) > 51300) {
+        return fail("VocabFile still contains obsolete per-file line scratch");
+    }
 
     VocabFile vf;
     char source[VOCAB_FILE_BUFFER_LEN];
@@ -115,6 +143,11 @@ int main()
     VocabIoStats no_change = vocab_file_io_stats();
     if (save_used != 0 || no_change.write_calls != 0 || no_change.index_scans != 0) {
         return fail("no-change save performed rewrite/reindex work");
+    }
+
+    VocabIoStats source_session = vocab_file_persistent_source_for_tests();
+    if (source_session.file_opens != 2 || source_session.closes != 1) {
+        return fail("card transitions did not reuse the persistent source handle");
     }
 
     vocab_file_cache_reset_stats_for_tests();

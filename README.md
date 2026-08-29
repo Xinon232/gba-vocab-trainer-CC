@@ -1,5 +1,7 @@
 # GBA Vocab Trainer
 
+Current source version: **v0.2.6**.
+
 A simple 5-box vocabulary trainer for the Game Boy Advance, built with Butano and targeted at SuperFW / Supercard SD-style setups.
 
 The trainer can load vocabulary from `.txt` files compatible with dict.cc-style vocab-trainer exports. Put text files on the SD card and select them from the in-game file browser.
@@ -46,7 +48,7 @@ Hund	dog
 дом	house
 ```
 
-The importer keeps 5-box progress when reopening files saved/exported by the trainer.
+The importer keeps 5-box progress when reopening files saved/exported by the trainer. Progress lives in the grouped sections of the TXT itself; the trainer does not require or create SRAM `.sav` persistence. Safe replacement may briefly use `.tmp` and `.bak` recovery names, which are removed after a successful validated save.
 
 If no SD-card vocabulary file is loaded yet, the built-in starter list shows one language-name sample for each main supported font group/language family, including English, French, German, Spanish, Portuguese, Italian, Dutch, Polish, Czech, Turkish, Greek, Russian, Ukrainian, Japanese, Chinese, and Korean.
 
