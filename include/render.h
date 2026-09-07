@@ -7,6 +7,8 @@
 #include "bn_sprite_ptr.h"
 #include "bn_sprite_text_generator.h"
 
+#include "text_layout.h"
+
 #include "vocab.h"
 #include "save_status.h"
 #include "state.h"  // for State::Side enum
@@ -26,8 +28,7 @@ public:
                 bool field_is_empty,       // current box has no words
                 bool feedback_active);     // held A/B keeps flash active
 
-    void set_text_page(int page) { if (text_page != page) { text_page = page; last_line_idx = -1; } }
-    int text_page_count() const { return measured_page_count; }
+
     void update_browser(const State& state);
     void update_shuffle_confirm(int current_field);
     void update_switch_confirm();
@@ -56,8 +57,9 @@ private:
     bn::sprite_text_generator multilang_gen;
     bn::vector<bn::sprite_ptr, 256> text_sprites;
 
-    int text_page = 0;
-    int measured_page_count = 1;
+    CardLayout body_layout;
+    char body_text[2][VOCAB_LINE_MAX] = {};
+
     bn::sprite_text_generator& font_for(const char* text);
     const char* notice = nullptr;
     const char* save_error = "SD I/O ERROR";

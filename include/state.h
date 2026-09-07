@@ -20,7 +20,7 @@
 //   A: correct recall → vocab_advance + flash_green
 //   B: wrong recall   → vocab_reset   + flash_red
 //   R: held           → reveal the answer (the other side of the pair)
-//   L: tap            → cycle direction_mode 1→2→3→1
+//   L: press          → immediately cycle direction_mode 1→2→3→1
 //   D-pad Left/Right: switch between boxes (fields), including empty ones
 //   D-pad Up:         undo the most recent A/B press (one-shot).
 //   D-pad Down:       ask to shuffle only the current box; A confirms, B cancels.
@@ -77,11 +77,7 @@ public:
 
     bool update(VocabFile& vf, const InputState& in);
 
-    int text_page() const { return text_page_; }
-    void set_text_page_count(int count) {
-        text_page_count_ = count > 0 ? count : 1;
-        text_page_ %= text_page_count_;
-    }
+
     int current_line_idx() const { return current_line_idx_; }
     int direction_mode() const { return direction_mode_; }
     int current_field() const { return current_field_; }
@@ -123,10 +119,7 @@ public:
     const char* filename(int i) const;
 
 private:
-    int text_page_ = 0;
-    int text_page_count_ = 1;
-    bool l_pending_ = false;
-    bool l_chord_ = false;
+
     int current_line_idx_;
     int direction_mode_;
     int current_field_;

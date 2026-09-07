@@ -5,8 +5,8 @@ BUILD=$(mktemp -d /tmp/gbavocab-host-XXXXXX)
 trap 'rm -rf "$BUILD"' EXIT
 ulimit -c 0
 CXX=${CXX:-g++}
-COMMON=(-std=c++17 -Wall -Wextra -Iinclude)
-for name in test_vocab test_vocab_10k test_vocab_grouped test_vocab_file_io_perf test_state test_feedback_hold test_integration test_save_status test_empty_boxes test_scan_limits test_long_display test_embedded_control test_switch test_page_input test_save_navigation test_text_layout; do
+COMMON=(-std=c++17 -O2 -Wall -Wextra -Iinclude)
+for name in test_vocab test_vocab_10k test_vocab_grouped test_vocab_file_io_perf test_state test_feedback_hold test_integration test_save_status test_empty_boxes test_scan_limits test_long_display test_embedded_control test_switch test_page_input test_save_navigation test_text_layout test_body_pixels; do
   "$CXX" "${COMMON[@]}" src/vocab.cpp src/vocab_file_io.cpp src/state.cpp "tests/$name.cpp" -o "$BUILD/$name"
   "$BUILD/$name"
 done
@@ -17,7 +17,7 @@ for mode in alias-backup-crash alias-temp-crash alias-backup-error alias-temp-er
   "$BUILD/fatfs_faults" "$mode"
 done
 "$CXX" "${COMMON[@]}" src/vocab.cpp src/vocab_file_io.cpp src/state.cpp tests/test_ui_regressions.cpp -o "$BUILD/ui_regressions"
-"$BUILD/ui_regressions" pages
+"$BUILD/ui_regressions" boxes
 "$BUILD/ui_regressions" gesture
 python3 tests/setup_renderer_mocks.py "$BUILD/renderer_mocks"
 "$CXX" -I"$BUILD/renderer_mocks" "${COMMON[@]}" src/vocab.cpp src/vocab_file_io.cpp src/state.cpp src/render.cpp tests/test_renderer_regressions.cpp -o "$BUILD/renderer_regressions"

@@ -1,6 +1,6 @@
 # GBA Vocab Trainer
 
-Current source version: **v0.2.7**.
+Current source version: **v0.2.8**.
 
 A simple 5-box vocabulary trainer for the Game Boy Advance, built with Butano and targeted at SuperFW / Supercard SD-style setups.
 
@@ -27,8 +27,8 @@ Training screen:
 - D-pad Left / Right: switch between boxes 1-5
 - D-pad Up: undo the most recent A/B decision, if you stayed in the same box
 - D-pad Down: ask to shuffle only the current box
-- L: tap and release to cycle direction mode: front-to-back, back-to-front, alternating
-- Hold L + D-pad Left / Right: previous / next text page (without changing box or mode)
+- L: press to immediately cycle direction mode: front-to-back, back-to-front, alternating
+- Long cards stay on one screen: the complete prompt and revealed answer wrap and use smaller body text only when necessary. There is no paging or scrolling; Left / Right always switches boxes.
 - Start: save/export the current progress
 - Select: open the file browser
 
@@ -51,7 +51,7 @@ Hund	dog
 
 The importer keeps all five box positions when reopening its own TXT files, including empty first and middle boxes. Exactly one empty physical line separates each pair of boxes (four separators total); vocabulary row bytes are retained and saved with CRLF endings. There are no metadata rows, extra columns, footers, or persistent `.sav` files.
 
-Rows must have exactly two nonempty tab-separated fields, with at most 191 content bytes per row. Invalid/overlong rows and entries beyond 10,000 make the loaded source **read-only**, with a visible warning, rather than allowing a save to drop unseen material. Long display text wraps at codepoint boundaries using the selected font's pixel measurements and is available on additional pages.
+Rows must have exactly two nonempty tab-separated fields, with at most 191 content bytes per row. Invalid/overlong rows and entries beyond 10,000 make the loaded source **read-only**, with a visible warning, rather than allowing a save to drop unseen material. Long display text wraps at codepoint boundaries using the selected font's pixel measurements. Both sides fit on one screen, with body-only size reduction when needed (down to half size for extreme entries). Short cards retain their original typography and positions. Both sides are measured together, so revealing the answer never resizes the prompt. TXT content is never shortened to fit the display.
 
 Transient replacement files use `name.txt.gbv1.tmp`, `.gbv1.bak`, and `.gbv1.txn`. Successful saves validate every ordered raw row and box before retiring the backup. Generic same-stem `.tmp`/`.bak` files are never used. Names longer than 54 bytes can be browsed but cannot be saved with the current 64-byte transaction-path buffer; shorten the filename first. See [v0.2.7 I/O notes](docs/file-io-v0.2.7.md) for recovery behavior and verification limitations.
 

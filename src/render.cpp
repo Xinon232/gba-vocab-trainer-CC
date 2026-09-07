@@ -16,6 +16,12 @@
 
 #include "render.h"
 #include "text_layout.h"
+#include "body_pixels.h"
+#include "bn_sprite_tiles_ptr.h"
+#include "bn_sprite_shape_size.h"
+#include "bn_sprite_palette_ptr.h"
+#include "bn_utf8_character.h"
+#include "bn_common.h"
 
 #include "bn_core.h"
 #include "bn_bg_palettes.h"
@@ -44,7 +50,7 @@ constexpr int Y_FOOTER    =  64;
 
 constexpr int SAVE_X = 116;
 constexpr int SAVE_Y = -72;
-constexpr int WRAP_LINE_STEP = 12;
+
 
 constexpr int FLASH_FRAMES = 60;  // at least one second at 60fps
 
@@ -52,6 +58,16 @@ constexpr int FLASH_FRAMES = 60;  // at least one second at 60fps
 constexpr int BG_R = 31;
 constexpr int BG_G = 31;
 constexpr int BG_B = 31;
+
+bool same_text(const char* a, const char* b)
+{
+    while (*a == *b) {
+        if (!*a) return true;
+        ++a;
+        ++b;
+    }
+    return false;
+}
 
 bool decode_utf8_codepoint(const char* text, int& index, unsigned& code)
 {
@@ -132,23 +148,57 @@ FlashcardFontKind flashcard_font_kind(const char* text)
     return FlashcardFontKind::LATIN;
 }
 
-void generate_wrapped_big(bn::sprite_text_generator& gen, int base_y, const char* text,
-                          int page, bn::vector<bn::sprite_ptr, 256>& sprites)
+void generate_body(bn::sprite_text_generator& gen, int y, const char* text,
+                   const TextLayout& layout, int step, int scale_eighths,
+                   bn::vector<bn::sprite_ptr, 256>& sprites)
 {
-    TextLayout layout = layout_text(text, 224, [&gen](const char* s) { return gen.width(s); });
-    if (!layout.valid) { gen.generate(0, base_y, "DISPLAY ERROR", sprites); return; }
-    int pages = text_pages(layout);
-    if (page >= pages) page = pages - 1;
-    int first = page * 2;
-    int count = layout.count - first;
-    if (count > 2) count = 2;
     char line[VOCAB_LINE_MAX];
-    for (int i = 0; i < count; ++i) {
-        int span = first + i;
-        int length = layout.end[span] - layout.start[span];
-        std::memcpy(line, text + layout.start[span], length);
+    for (int i = 0; i < layout.count; ++i) {
+        int length = layout.end[i] - layout.start[i];
+        std::memcpy(line, text + layout.start[i], length);
         line[length] = 0;
-        gen.generate(0, base_y - ((count - 1) * WRAP_LINE_STEP) / 2 + i * WRAP_LINE_STEP, line, sprites);
+        if (scale_eighths == 8) {
+            gen.generate(0, y + i * step, line, sprites);
+            continue;
+        }
+        // Only final chunks enter VRAM. Public font APIs read existing ROM
+        // glyphs; the bounded 224x16 packed CPU image lives in EWRAM.
+        static uint32_t pixels[224 * 16 / 8] BN_DATA_EWRAM_BSS;
+        std::memset(pixels, 0, sizeof(pixels));
+        const auto& font = gen.font();
+        const auto& item = font.item();
+        int glyph_width = item.shape_size().width();
+        int source_x = 0;
+        for (int p = 0; p < length;) {
+            bn::utf8_character character(line + p);
+            int code = character.data();
+            int index = code < 128 ? code - 33 :
+                font.utf8_characters_ref().index(character) + 94;
+            int width = font.character_widths_ref()[index + 1];
+            if (code != ' ' && width) {
+                const auto tiles = item.tiles_item().graphics_tiles_ref(index);
+                const auto* source = reinterpret_cast<const uint32_t*>(tiles.data());
+                paint_body_glyph(source, glyph_width, width, source_x, scale_eighths, pixels);
+            }
+            source_x += width + font.space_between_characters();
+            p += character.size();
+        }
+        int width = (source_x * scale_eighths + 7) / 8;
+        int height = scale_eighths == 4 ? 8 : 16;
+        auto palette = bn::sprite_palette_ptr::create(gen.palette_item());
+        for (int left = 0; left < width; left += 32) {
+            auto tiles = bn::sprite_tiles_ptr::allocate(height / 2, bn::bpp_mode::BPP_4);
+            auto* dest = reinterpret_cast<uint32_t*>(tiles.vram()->data());
+            for (int sy = 0; sy < height; ++sy) for (int tx = 0; tx < 4; ++tx) {
+                int py = sy - (height - scale_eighths * 2) / 2;
+                dest[(sy / 8) * 32 + tx * 8 + sy % 8] =
+                    py >= 0 && py < scale_eighths * 2 && left / 8 + tx < 28 ?
+                    pixels[py * 28 + left / 8 + tx] : 0;
+            }
+            sprites.push_back(bn::sprite_ptr::create(left + 16 - width / 2, y + i * step,
+                bn::sprite_shape_size(bn::sprite_shape::WIDE,
+                    height == 8 ? bn::sprite_size::NORMAL : bn::sprite_size::BIG), tiles, palette));
+        }
     }
 }
 
@@ -196,6 +246,7 @@ Renderer::~Renderer() {
 }
 
 void Renderer::reset() {
+    body_layout.valid = false;
     last_line_idx = -1;
     last_field = 0;
     last_active_side = State::SIDE_A;
@@ -249,7 +300,8 @@ void Renderer::update(const VocabFile& vf, int current_line_idx, int current_fie
         }
     }
 
-    if (current_line_idx != last_line_idx ||
+    if (!same_text(current.a, body_text[0]) || !same_text(current.b, body_text[1]) ||
+        current_line_idx != last_line_idx ||
         current_field != last_field ||
         active_side != last_active_side ||
         alternate_mode != last_alternate_mode ||
@@ -374,40 +426,33 @@ void Renderer::render_full(const VocabFile& vf, int current_line_idx, int curren
         small_gen.generate(0, Y_HEADER, header, text_sprites);
     }
 
-    int pages = 1;
-    if (!field_is_empty) {
-        for (const char* side : {current.a, current.b}) {
-            auto& gen = font_for(side);
-            auto layout = layout_text(side, 224, [&gen](const char* s) { return gen.width(s); });
-            int count = text_pages(layout);
-            if (count > pages) pages = count;
-        }
+    // Cache actual-font spans for BOTH sides, independent of reveal/mode/UI.
+    bool changed = !same_text(current.a, body_text[0]) || !same_text(current.b, body_text[1]);
+    if (changed) {
+        std::memcpy(body_text[0], current.a, std::strlen(current.a) + 1);
+        std::memcpy(body_text[1], current.b, std::strlen(current.b) + 1);
+        body_layout.valid = false;
     }
-    measured_page_count = pages;
-    int page = text_page % pages;
-    if (pages > 1 && !vf.rejected_rows && save_status != SaveStatus::FAILED) {
-        auto hint = bn::format<40>("L+Left/Right  page {}/{}", page + 1, pages);
-        small_gen.generate(0, 44, hint, text_sprites);
+    if (!field_is_empty && (!body_layout.valid || changed)) {
+        bn::sprite_text_generator* fonts[2] = {&font_for(current.a), &font_for(current.b)};
+        layout_card(current.a, current.b,
+            [&](int side, const char* s) { return fonts[side]->width(s); }, body_layout);
+
     }
 
-    // Prompt: the active side of the current word. 16x16 — BIG.
     if (field_is_empty) {
         bn::string<8> empty_str = "EMPTY";
         latin_gen.generate(0, Y_PROMPT, empty_str, text_sprites);
+    } else if (!body_layout.valid) {
+        // Explicit invariant failure, never silently omit part of a card.
+        small_gen.generate(0, 0, "DISPLAY ERROR", text_sprites);
     } else {
-        const char* prompt = (active_side == State::SIDE_A) ? current.a : current.b;
-        if (prompt[0] != 0) {
-            bn::sprite_text_generator& gen = font_for(prompt);
-            generate_wrapped_big(gen, Y_PROMPT, prompt, page, text_sprites);
-        }
-    }
-
-    // Answer: the other side, only when R held. 16x16 — BIG.
-    if (show_answer && !field_is_empty) {
-        const char* answer = (active_side == State::SIDE_A) ? current.b : current.a;
-        if (answer[0] != 0) {
-            bn::sprite_text_generator& gen = font_for(answer);
-            generate_wrapped_big(gen, Y_ANSWER, answer, page, text_sprites);
+        int prompt = active_side == State::SIDE_A ? 0 : 1;
+        for (int side : {prompt, 1 - prompt}) {
+            if (side != prompt && !show_answer) continue;
+            generate_body(font_for(body_text[side]), card_side_y(body_layout, side, prompt),
+                body_text[side], body_layout.side[side], body_layout.line_step,
+                body_layout.scale_eighths, text_sprites);
         }
     }
 

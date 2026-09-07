@@ -88,7 +88,7 @@ static void render_current_frame(Renderer& renderer, State& state)
         return;
     }
 
-    renderer.set_text_page(state.text_page());
+
     int idx = state.current_line_idx();
     if (idx < 0 || idx >= g_vocab_file.line_count) idx = 0;
 
@@ -99,9 +99,7 @@ static void render_current_frame(Renderer& renderer, State& state)
         renderer.update(g_vocab_file, idx, state.current_field(),
                         current, state.active_side(), state.direction_mode() == 3,
                         state.show_answer(), field_empty, state.feedback_active());
-        state.set_text_page_count(renderer.text_page_count());
     } else {
-        state.set_text_page_count(1);
         renderer.update_message("READ ERROR / text too long");
     }
 }
@@ -168,7 +166,7 @@ int main()
             }
             const char* filename = state.consume_load_request();
             if (proceed && load_selected_vocab(filename)) {
-                state = State(); // new list: reset navigation, undo, feedback and paging
+                state = State(); // new list: reset navigation, undo and feedback
                 renderer.set_notice(nullptr);
                 renderer.set_save_status(SaveStatus::IDLE);
                 renderer.reset();
