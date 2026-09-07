@@ -1,6 +1,7 @@
 // Production FatFS API backed by isolated host files; hooks inject actual API failures.
 #include "fatfs/ff.h"
 #include <cstdio>
+#include <cassert>
 #include <cstring>
 #include <map>
 #include <string>
@@ -24,12 +25,15 @@ std::string fat_root, corrupt_on_rename, crash_after_rename;
 UINT fat_read_limit = 0;
 // Return FR_OK to continue; hooks may throw to simulate process interruption.
 std::function<FRESULT(const std::string&,const std::string&)> fat_hook;
+// Semantic lifecycle observer: identity of the FIL used, not I/O measurements.
+std::function<void(const std::string&, FIL*)> fat_handle_hook;
 static FRESULT hook(const std::string& op,const std::string& p){return fat_hook?fat_hook(op,p):FR_OK;}
 void fat_reset(){for(auto& f:files)fclose(f.second);files.clear();names.clear();dirs.clear();fat_hook={};fat_read_limit=0;corrupt_on_rename.clear();crash_after_rename.clear();}
 static std::string path(const TCHAR* p){return fat_root+"/"+p;}
 extern "C" {
 FRESULT f_mount(FATFS*,const TCHAR*,BYTE){return FR_OK;}
 FRESULT f_open(FIL* f,const TCHAR* p,BYTE mode){
+ assert(!files.count(f)); // Never overwrite a live FIL (FatFS lock owner).
  auto r=hook((mode&FA_CREATE_NEW)?"create":"open",p);if(r!=FR_OK)return r;
  auto name=path(p);if((mode&FA_CREATE_NEW)&&std::filesystem::exists(name))return FR_EXIST;
  FILE* h=fopen(name.c_str(),(mode&FA_WRITE)?((mode&FA_CREATE_NEW)?"wb":"r+b"):"rb");if(!h)return FR_NO_FILE;
@@ -37,8 +41,8 @@ FRESULT f_open(FIL* f,const TCHAR* p,BYTE mode){
  f->obj.fs=&volume;f->obj.sclust=f->obj.objsize?chain_for(name):0;
  return hook("opened",p);
 }
-FRESULT f_close(FIL* f){auto i=files.find(f);if(i==files.end())return FR_INVALID_OBJECT;auto name=names[f];auto r=hook("close",name);if(r!=FR_OK)return r;int e=fclose(i->second);files.erase(i);names.erase(f);return e?FR_DISK_ERR:hook("closed",name);}
-FRESULT f_read(FIL* f,void* b,UINT n,UINT* used){*used=0;auto r=hook("read",names[f]);if(r!=FR_OK)return r;if(fat_read_limit && n>fat_read_limit)n=fat_read_limit;*used=fread(b,1,n,files.at(f));f->fptr+=*used;return ferror(files.at(f))?FR_DISK_ERR:FR_OK;}
+FRESULT f_close(FIL* f){if(fat_handle_hook)fat_handle_hook("close",f);auto i=files.find(f);if(i==files.end())return FR_INVALID_OBJECT;auto name=names[f];auto r=hook("close",name);if(r!=FR_OK)return r;int e=fclose(i->second);files.erase(i);names.erase(f);return e?FR_DISK_ERR:hook("closed",name);}
+FRESULT f_read(FIL* f,void* b,UINT n,UINT* used){if(fat_handle_hook)fat_handle_hook("read",f);*used=0;auto r=hook("read",names[f]);if(r!=FR_OK)return r;if(fat_read_limit && n>fat_read_limit)n=fat_read_limit;*used=fread(b,1,n,files.at(f));f->fptr+=*used;return ferror(files.at(f))?FR_DISK_ERR:FR_OK;}
 FRESULT f_write(FIL* f,const void* b,UINT n,UINT* used){*used=0;auto r=hook("write",names[f]);if(r!=FR_OK){*used=fwrite(b,1,n>5?5:n,files.at(f));fflush(files.at(f));return r;}*used=fwrite(b,1,n,files.at(f));f->fptr+=*used;f->obj.objsize=f->fptr;if(*used!=n||ferror(files.at(f)))return FR_DISK_ERR;fflush(files.at(f));return hook("wrote",names[f]);}
 FRESULT f_sync(FIL* f){auto r=hook("sync",names[f]);if(r!=FR_OK)return r;return fflush(files.at(f))==0?hook("synced",names[f]):FR_DISK_ERR;}
 FRESULT f_lseek(FIL* f,FSIZE_t n){auto r=hook("seek",names[f]);if(r!=FR_OK)return r;f->fptr=n;return fseek(files.at(f),n,SEEK_SET)==0?FR_OK:FR_DISK_ERR;}

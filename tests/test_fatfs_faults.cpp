@@ -25,6 +25,19 @@ int main(int argc,char** argv){
  auto load=[&](){return vocab_file_load("cards.txt",v,fallback,sizeof fallback,used);};
  auto save=[&](){return vocab_file_save_grouped(v,fallback,used,out,sizeof out,written);};
  assert(load());
+ if(mode=="installed-no-original"){
+  vocab_advance(v,0);bool promoted=false;
+  fat_hook=[&](auto op,auto p){
+   if(op=="renamed"&&p=="cards.txt")promoted=true;
+   // Chain identity probes remain allowed; no backup payload comparison.
+   if(promoted&&op=="read"&&p=="cards.txt.gbv1.bak")return FR_DISK_ERR;
+   return FR_OK;
+  };
+  assert(save());assert(promoted);assert(!vocab_any_dirty(v));
+  assert(get("cards.txt")=="c\td\r\n\r\na\tb\r\n\r\n\r\n\r\n");
+  assert(!exists("cards.txt.gbv1.bak")&&!exists("cards.txt.gbv1.txn"));
+  puts("PASS installed validation never reads original payload");return 0;
+ }
  if(mode=="identity-boundaries"){
   // Mixed line endings, non-ASCII bytes, a maximum raw row and a final
   // unterminated row exercise buffered scan/write/readback boundaries.

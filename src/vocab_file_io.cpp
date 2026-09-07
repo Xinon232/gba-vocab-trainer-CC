@@ -242,8 +242,12 @@ VocabTransactionTestResult vocab_file_transaction_for_tests(VocabIoFailurePoint 
 
 #if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
 static FATFS s_fatfs;
-BN_DATA_EWRAM_BSS static FIL s_loaded_source;
+// FIL addresses never change: FatFS locks and host adapters own these objects.
+BN_DATA_EWRAM_BSS static FIL s_source_pool[2];
+static FIL* s_loaded_source = &s_source_pool[0];
+static FIL* s_candidate_source = &s_source_pool[1];
 static bool s_loaded_source_open = false;
+static bool s_candidate_source_open = false;
 // Save-only reindex scratch: bounded metadata (offsets/fields/dirty/counts), not
 // vocabulary text. Keeping it static places it in normal EWRAM/BSS rather than
 // on the small GBA stack and preserves the live dirty state if reindex fails.
@@ -273,7 +277,7 @@ static FRESULT tracked_close(FIL* fp)
 static bool ensure_loaded_source_open()
 {
     return ensure_source_open(s_loaded_source_open, []() {
-        return tracked_open(&s_loaded_source, s_loaded_name,
+        return tracked_open(s_loaded_source, s_loaded_name,
                             FA_READ | FA_OPEN_EXISTING) == FR_OK;
     });
 }
@@ -281,7 +285,14 @@ static bool ensure_loaded_source_open()
 static bool close_loaded_source()
 {
     return close_source(s_loaded_source_open, []() {
-        return tracked_close(&s_loaded_source) == FR_OK;
+        return tracked_close(s_loaded_source) == FR_OK;
+    });
+}
+
+static bool close_candidate_source()
+{
+    return close_source(s_candidate_source_open, []() {
+        return tracked_close(s_candidate_source) == FR_OK;
     });
 }
 
@@ -508,11 +519,20 @@ static void scan_sd_root()
 
 bool vocab_file_init()
 {
-    s_name_count = 0;
 #if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
-    close_loaded_source();
-    s_loaded_source_open = false;
+    // A failed close must not be followed by remounting or forgetting a lock.
+    // INVALID_OBJECT means a previous filesystem reset already invalidated it.
+    auto close_for_remount = [](FIL* file, bool& open) {
+        if (!open) return true;
+        FRESULT result = tracked_close(file);
+        if (result != FR_OK && result != FR_INVALID_OBJECT) return false;
+        open = false;
+        return true;
+    };
+    if (!close_for_remount(s_candidate_source, s_candidate_source_open) ||
+        !close_for_remount(s_loaded_source, s_loaded_source_open)) return false;
 #endif
+    s_name_count = 0;
     s_loaded_from_sd = false;
     s_loaded_name[0] = 0;
 #if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
@@ -681,18 +701,14 @@ private:
     FileIdentity identity_ = empty_identity();
 };
 
-static bool scan_sd_index(const char* filename, VocabFile& vf, FileIdentity& identity)
+static bool scan_sd_index(FIL& fp, VocabFile& vf, FileIdentity& identity)
 {
-    FIL fp;
-    if (tracked_open(&fp, filename, FA_READ | FA_OPEN_EXISTING) != FR_OK) return false;
-
     FatFsSequentialSource source(fp);
     ++s_io_stats.index_scans;
     int loaded = scan_sequential_source(source, vf);
     identity = source.identity();
     bool size_ok = identity.size == f_size(&fp);
-    bool close_ok = tracked_close(&fp) == FR_OK;
-    if (source.failed() || !size_ok || !close_ok || loaded <= 0) {
+    if (source.failed() || !size_ok || loaded <= 0) {
         vf.reset();
         return false;
     }
@@ -921,21 +937,24 @@ bool vocab_file_load(const char* filename, VocabFile& vf,
 {
 #if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
     if (s_sd_ready && filename && has_txt_ext(filename) && !str_eq_local(filename, "builtin.txt")) {
-        // Index and identity share one stream; retain an independent identity
-        // read to reject source edits between indexing and installation.
+        // Retain the very FIL used to index/fingerprint, with no independent
+        // opening reread. A failed-close spare stays quarantined until closed.
+        if (!close_candidate_source() || !recover_sd_sidecars(filename)) return false;
+        if (tracked_open(s_candidate_source, filename, FA_READ | FA_OPEN_EXISTING) != FR_OK)
+            return false;
+        s_candidate_source_open = true;
         FileIdentity candidate_identity;
-        if (!recover_sd_sidecars(filename) ||
-            !scan_sd_index(filename, s_reindex_scratch, candidate_identity) ||
-            matches_file(filename, candidate_identity) != IdentityMatch::match) return false;
-        char previous[VOCAB_FILENAME_MAX];
-        std::memcpy(previous, s_loaded_name, sizeof previous);
-        if (!close_loaded_source()) return false;
-        set_loaded_name(filename);
-        if (!ensure_loaded_source_open()) {
-            set_loaded_name(previous);
-            if (s_loaded_from_sd) ensure_loaded_source_open();
+        if (!scan_sd_index(*s_candidate_source, s_reindex_scratch, candidate_identity) ||
+            !close_loaded_source()) {
+            close_candidate_source();
             return false;
         }
+        FIL* previous = s_loaded_source;
+        s_loaded_source = s_candidate_source;
+        s_candidate_source = previous;
+        s_loaded_source_open = true;
+        s_candidate_source_open = false;
+        set_loaded_name(filename);
         vf = s_reindex_scratch;
         s_loaded_identity = candidate_identity;
         s_source_verified = true;
@@ -1027,7 +1046,7 @@ bool vocab_file_show(const VocabFile& vf, const char* fallback_buf, int fallback
         }
         char line[VOCAB_RAW_LINE_MAX];
         int line_len = 0;
-        if (read_bounded_raw_line(s_loaded_source, source_offset, line,
+        if (read_bounded_raw_line(*s_loaded_source, source_offset, line,
                                   sizeof(line), line_len)) {
             ok = parse_line_into(line, line_len, parsed);
         }
@@ -1188,19 +1207,23 @@ static bool write_sd_grouped_temp(const VocabFile& vf, const char* tmp_name, boo
     return ok;
 }
 
-// Validate the writer-built index and every ordered raw row in the same scan
-// that authenticates physical replacement bytes. No second replacement reader
-// and no additional VocabFile copy; generated offsets are never trusted alone.
+// Before installation compare exact ordered raw rows against the source once.
+// After installation authenticate physical bytes and the complete planned index
+// without reading original payload again (approved non-adversarial fault model).
+enum class ReplacementValidation { exact_source, installed_fingerprint };
 static bool validate_replacement(const char* replacement, const char* source,
                                   const VocabFile& expected, const VocabFile& actual,
-                                  const FileIdentity& identity)
+                                  const FileIdentity& identity,
+                                  ReplacementValidation validation = ReplacementValidation::exact_source)
 {
+    const bool exact = validation == ReplacementValidation::exact_source;
     if (!actual.loaded || actual.rejected_rows || actual.line_count != expected.line_count ||
         !vocab_field_counts_valid(actual)) return false;
     FIL old_file, new_file;
-    if (tracked_open(&old_file, source, FA_READ) != FR_OK) return false;
+    if (exact && tracked_open(&old_file, source, FA_READ) != FR_OK) return false;
     if (tracked_open(&new_file, replacement, FA_READ) != FR_OK) {
-        tracked_close(&old_file); return false;
+        if (exact) tracked_close(&old_file);
+        return false;
     }
     FatFsRawRowReader old_reader(old_file);
     FatFsSequentialSource readback(new_file);
@@ -1219,14 +1242,16 @@ static bool validate_replacement(const char* replacement, const char* source,
             }
             if (rank >= actual.line_count || expected_box > 5 || box != expected_box ||
                 actual.field[rank] != box || actual.line_offsets[rank] != offset) return false;
+            const uint32_t source_offset = expected.line_offsets[expected_i++];
+            if (!exact) return true;
             char old_row[VOCAB_RAW_LINE_MAX];
             int old_length = 0;
-            return old_reader.read(expected.line_offsets[expected_i++], old_row, old_length) &&
+            return old_reader.read(source_offset, old_row, old_length) &&
                 old_length == length && std::memcmp(old_row, row, length) == 0;
         }, rejected);
     bool ok = loaded == expected.line_count && !rejected && !readback.failed() &&
         readback.identity().size == f_size(&new_file) && same_identity(readback.identity(), identity);
-    if (tracked_close(&old_file) != FR_OK) ok = false;
+    if (exact && tracked_close(&old_file) != FR_OK) ok = false;
     if (tracked_close(&new_file) != FR_OK) ok = false;
     return ok;
 }
@@ -1248,7 +1273,8 @@ public:
         return safe() && tracked_rename(temporary_, original_) == FR_OK;
     }
     bool reindex_replacement() {
-        return safe() && validate_replacement(original_, backup_, expected_, s_reindex_scratch, identity_);
+        return safe() && validate_replacement(original_, nullptr, expected_, s_reindex_scratch, identity_,
+                                               ReplacementValidation::installed_fingerprint);
     }
     bool park_failed_replacement() {
         return safe() && tracked_rename(original_, temporary_) == FR_OK;
@@ -1276,7 +1302,7 @@ static bool save_sd_grouped(VocabFile& vf)
     char bak_name[VOCAB_FILENAME_MAX];
     char txn_name[VOCAB_FILENAME_MAX];
 
-    if (!close_loaded_source()) return false;
+    if (!close_candidate_source() || !close_loaded_source()) return false;
     auto fail_and_reopen = []() {
         s_source_verified = matches_file(s_loaded_name, s_loaded_identity) == IdentityMatch::match;
         invalidate_card_cache();

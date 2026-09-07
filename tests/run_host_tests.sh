@@ -18,13 +18,15 @@ for name in test_vocab test_vocab_10k test_vocab_grouped test_vocab_file_io_perf
   "$BUILD/$name"
 done
 "$CXX" "${COMMON[@]}" -DVOCAB_HOST_FATFS src/vocab.cpp tests/host_fatfs.cpp tests/test_io_windows.cpp -o "$BUILD/io_windows"
-for mode in capacity generated maximum short-scanner short-identity; do
+for mode in capacity generated maximum short-scanner short-identity installed-offset installed-box installed-count installed-row installed-tail; do
   "$BUILD/io_windows" "$mode"
 done
 "$CXX" "${COMMON[@]}" -DVOCAB_HOST_FATFS src/vocab.cpp src/vocab_file_io.cpp tests/host_fatfs.cpp tests/test_fatfs_transaction.cpp -o "$BUILD/fatfs"
 "$BUILD/fatfs"
+"$CXX" "${COMMON[@]}" -DVOCAB_HOST_FATFS src/vocab.cpp src/vocab_file_io.cpp tests/host_fatfs.cpp tests/test_load_handles.cpp -o "$BUILD/load_handles"
+"$BUILD/load_handles"
 "$CXX" "${COMMON[@]}" -DVOCAB_HOST_FATFS src/vocab.cpp src/vocab_file_io.cpp src/state.cpp tests/host_fatfs.cpp tests/test_fatfs_faults.cpp -o "$BUILD/fatfs_faults"
-for mode in identity-boundaries load-truncated-stream output-tail-corruption alias-backup-crash alias-temp-crash alias-backup-error alias-temp-error alias-backup-temp recovery-open recovery-close stat-owned create-collision recovery-read recovery-stat cleanup-stat append edit precommit journal-short temp-short temp-crash rollback-park rollback-restore rename-restore reopen-ok reopen-fail; do
+for mode in installed-no-original identity-boundaries load-truncated-stream output-tail-corruption alias-backup-crash alias-temp-crash alias-backup-error alias-temp-error alias-backup-temp recovery-open recovery-close stat-owned create-collision recovery-read recovery-stat cleanup-stat append edit precommit journal-short temp-short temp-crash rollback-park rollback-restore rename-restore reopen-ok reopen-fail; do
   "$BUILD/fatfs_faults" "$mode"
 done
 "$CXX" "${COMMON[@]}" src/vocab.cpp src/vocab_file_io.cpp src/state.cpp tests/test_ui_regressions.cpp -o "$BUILD/ui_regressions"

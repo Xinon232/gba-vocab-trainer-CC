@@ -1,6 +1,6 @@
 # GBA Vocab Trainer
 
-Current source version: **v0.2.10**.
+Current source version: **v0.2.11**.
 
 A simple 5-box vocabulary trainer for the Game Boy Advance, built with Butano and targeted at SuperFW / Supercard SD-style setups.
 
@@ -53,7 +53,7 @@ The importer keeps all five box positions when reopening its own TXT files, incl
 
 Rows must have exactly two nonempty tab-separated fields, with at most 191 content bytes per row. Invalid/overlong rows and entries beyond 10,000 make the loaded source **read-only**, with a visible warning, rather than allowing a save to drop unseen material. Long display text wraps at codepoint boundaries using the selected font's pixel measurements. Both sides fit on one screen, with body-only size reduction when needed (down to half size for extreme entries). Short cards retain their original typography and positions. Both sides are measured together, so revealing the answer never resizes the prompt. TXT content is never shortened to fit the display.
 
-Transient replacement files use `name.txt.gbv1.tmp`, `.gbv1.bak`, and `.gbv1.txn`. Successful saves validate every ordered raw row and box before retiring the backup. Generic same-stem `.tmp`/`.bak` files are never used. Names longer than 54 bytes can be browsed but cannot be saved with the current 64-byte transaction-path buffer; shorten the filename first. See [v0.2.10 I/O notes](docs/file-io-v0.2.10.md) for bounded windows and combined readback validation, [v0.2.9 identity notes](docs/file-io-v0.2.9.md), and [recovery details](docs/file-io-v0.2.7.md).
+Transient replacement files use `name.txt.gbv1.tmp`, `.gbv1.bak`, and `.gbv1.txn`. Successful saves compare every ordered raw row and box exactly once before installation, then verify the installed physical fingerprint and complete index before retiring the backup. Generic same-stem `.tmp`/`.bak` files are never used. Names longer than 54 bytes can be browsed but cannot be saved with the current 64-byte transaction-path buffer; shorten the filename first. See [v0.2.11 I/O notes](docs/file-io-v0.2.11.md) for the approved validation fault model and retained same-handle loading, [v0.2.10 I/O notes](docs/file-io-v0.2.10.md) for bounded windows, [v0.2.9 identity notes](docs/file-io-v0.2.9.md), and [recovery details](docs/file-io-v0.2.7.md).
 
 **dict.cc compatibility:** a synthetic file emitted by the actual exporter was uploaded through dict.cc's file input and both Unicode/annotated pairs were read back from Maintain. Vocabulary interchange works, but dict.cc itself trims leading/trailing empty groups and collapses consecutive empty lines: do not expect empty-box learning-state gaps to survive a round trip through the website. The private user sample was not uploaded.
 
