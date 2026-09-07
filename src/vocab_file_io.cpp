@@ -614,6 +614,23 @@ int vocab_file_scan_buffered_for_tests(const char* data, int data_len, int chunk
 #endif
 
 #if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
+// Identity is accumulated from the same bytes consumed by indexing/writing.
+struct FileIdentity { uint32_t size, hash, sum; };
+static FileIdentity empty_identity() { return {0, 2166136261u, 5381u}; }
+static void extend_identity(FileIdentity& id, const char* bytes, UINT count)
+{
+    id.size += count;
+    for (UINT i = 0; i < count; ++i) {
+        unsigned char c = bytes[i];
+        id.hash = (id.hash ^ c) * 16777619u;
+        id.sum = id.sum * 33u + c;
+    }
+}
+static bool same_identity(const FileIdentity& a, const FileIdentity& b)
+{
+    return a.size == b.size && a.hash == b.hash && a.sum == b.sum;
+}
+
 class FatFsSequentialSource {
 public:
     explicit FatFsSequentialSource(FIL& fp) :
@@ -632,6 +649,7 @@ public:
                 failed_ = true;
                 return false;
             }
+            extend_identity(identity_, s_sequential_read_buffer, bytes_read);
             buffer_pos_ = 0;
             buffer_len_ = (int)bytes_read;
             if (buffer_len_ == 0) return false;
@@ -642,6 +660,7 @@ public:
     }
 
     bool failed() const { return failed_; }
+    const FileIdentity& identity() const { return identity_; }
 
 private:
     FIL& fp_;
@@ -649,9 +668,10 @@ private:
     int buffer_pos_;
     int buffer_len_;
     bool failed_;
+    FileIdentity identity_ = empty_identity();
 };
 
-static bool scan_sd_index(const char* filename, VocabFile& vf)
+static bool scan_sd_index(const char* filename, VocabFile& vf, FileIdentity& identity)
 {
     FIL fp;
     if (tracked_open(&fp, filename, FA_READ | FA_OPEN_EXISTING) != FR_OK) return false;
@@ -659,8 +679,10 @@ static bool scan_sd_index(const char* filename, VocabFile& vf)
     FatFsSequentialSource source(fp);
     ++s_io_stats.index_scans;
     int loaded = scan_sequential_source(source, vf);
+    identity = source.identity();
+    bool size_ok = identity.size == f_size(&fp);
     bool close_ok = tracked_close(&fp) == FR_OK;
-    if (source.failed() || !close_ok || loaded <= 0) {
+    if (source.failed() || !size_ok || !close_ok || loaded <= 0) {
         vf.reset();
         return false;
     }
@@ -717,7 +739,6 @@ static bool transaction_chains_safe(const char* original, const char* tmp,
 
 // Transient transaction identity. Checksums cover all physical bytes, including
 // separators and EOF; row-count-only validation cannot identify a complete file.
-struct FileIdentity { uint32_t size, hash, sum; };
 static FileIdentity s_loaded_identity;
 static bool s_source_verified = true;
 struct SaveJournal {
@@ -737,19 +758,15 @@ static bool identify_file(const char* name, FileIdentity& id)
 {
     FIL f;
     if (tracked_open(&f, name, FA_READ) != FR_OK) return false;
-    id = {0, 2166136261u, 5381u};
+    id = empty_identity();
     bool ok = true;
     while (ok) {
         UINT n = 0;
         if (tracked_read(&f, s_sequential_read_buffer, sizeof s_sequential_read_buffer, &n) != FR_OK) { ok = false; break; }
         if (!n) break;
-        id.size += n;
-        for (UINT i = 0; i < n; ++i) {
-            unsigned char c = s_sequential_read_buffer[i];
-            id.hash = (id.hash ^ c) * 16777619u;
-            id.sum = id.sum * 33u + c;
-        }
+        extend_identity(id, s_sequential_read_buffer, n);
     }
+    if (id.size != f_size(&f)) ok = false;
     if (tracked_close(&f) != FR_OK) ok = false;
     return ok;
 }
@@ -758,17 +775,17 @@ static IdentityMatch matches_file(const char* name, const FileIdentity& expected
 {
     FileIdentity actual;
     if (!identify_file(name, actual)) return IdentityMatch::error;
-    return actual.size == expected.size && actual.hash == expected.hash && actual.sum == expected.sum ?
+    return same_identity(actual, expected) ?
         IdentityMatch::match : IdentityMatch::mismatch;
 }
-static bool write_journal(const char* filename, const char* temporary, const char* journal_name, bool& created)
+static bool write_journal(const char* filename, const FileIdentity* temporary, const char* journal_name, bool& created)
 {
     SaveJournal j = {};
     created = false;
     std::memcpy(j.magic, temporary ? "GBAVOCAB-TXN-1" : "GBAVOCAB-TXN-2", 14);
     std::memcpy(j.original, filename, std::strlen(filename) + 1);
     j.before = s_loaded_identity;
-    if (temporary && !identify_file(temporary, j.after)) return false;
+    if (temporary) j.after = *temporary;
     j.check = journal_check(j);
     FIL f;
     if (tracked_open(&f, journal_name, FA_WRITE | (temporary ? FA_OPEN_EXISTING : FA_CREATE_NEW)) != FR_OK) return false;
@@ -890,9 +907,11 @@ bool vocab_file_load(const char* filename, VocabFile& vf,
 {
 #if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
     if (s_sd_ready && filename && has_txt_ext(filename) && !str_eq_local(filename, "builtin.txt")) {
+        // Index and identity share one stream; retain an independent identity
+        // read to reject source edits between indexing and installation.
         FileIdentity candidate_identity;
-        if (!recover_sd_sidecars(filename) || !identify_file(filename, candidate_identity) ||
-            !scan_sd_index(filename, s_reindex_scratch) ||
+        if (!recover_sd_sidecars(filename) ||
+            !scan_sd_index(filename, s_reindex_scratch, candidate_identity) ||
             matches_file(filename, candidate_identity) != IdentityMatch::match) return false;
         char previous[VOCAB_FILENAME_MAX];
         std::memcpy(previous, s_loaded_name, sizeof previous);
@@ -1055,17 +1074,22 @@ public:
         UINT written = 0;
         ok_ = tracked_write(&fp_, s_save_write_buffer, (UINT)used_, &written) == FR_OK &&
               written == (UINT)used_;
+        if (ok_) extend_identity(identity_, s_save_write_buffer, written);
         used_ = 0;
         return ok_;
     }
 
+    const FileIdentity& identity() const { return identity_; }
+
 private:
+    FileIdentity identity_ = empty_identity();
     FIL& fp_;
     int used_;
     bool ok_;
 };
 
-static bool write_sd_grouped_temp(const VocabFile& vf, const char* tmp_name, bool& created)
+static bool write_sd_grouped_temp(const VocabFile& vf, const char* tmp_name, bool& created,
+                                   FileIdentity& identity)
 {
     created = false;
     FIL in;
@@ -1094,17 +1118,59 @@ static bool write_sd_grouped_temp(const VocabFile& vf, const char* tmp_name, boo
         if (field < 5 && ok && !writer.append("\r\n", 2)) ok = false;
     }
     if (ok && !writer.flush()) ok = false;
+    if (ok) identity = writer.identity();
     if (ok && tracked_sync(&out) != FR_OK) ok = false;
     if (tracked_close(&in) != FR_OK) ok = false;
     if (tracked_close(&out) != FR_OK) ok = false;
     return ok;
 }
 
+// Save validation uses two existing scratch windows. Reusing nearby bytes does
+// not change the exact raw-row comparison or permit a short non-EOF row.
+class FatFsRawRowReader {
+public:
+    FatFsRawRowReader(FIL& fp, char* buffer) : fp_(fp), buffer_(buffer) {}
+    bool read(uint32_t offset, char* row, int& length)
+    {
+        length = 0;
+        while (length < VOCAB_RAW_LINE_MAX) {
+            if (!valid_ || offset < start_ || offset - start_ >= size_) {
+                if (offset >= f_size(&fp_)) {
+                    row[length] = 0;
+                    return length > 0 && length < VOCAB_RAW_LINE_MAX;
+                }
+                if (tracked_seek(&fp_, offset) != FR_OK) return false;
+                start_ = offset;
+                size_ = 0;
+                valid_ = false;
+                if (tracked_read(&fp_, buffer_, 512, &size_) != FR_OK || !size_ ||
+                    (size_ < 512 && start_ + size_ != f_size(&fp_))) return false;
+                valid_ = true;
+            }
+            char c = buffer_[offset++ - start_];
+            if (c == '\r' || c == '\n') {
+                row[length] = 0;
+                return length > 0;
+            }
+            row[length++] = c;
+        }
+        return false;
+    }
+private:
+    FIL& fp_;
+    char* buffer_;
+    uint32_t start_ = 0;
+    UINT size_ = 0;
+    bool valid_ = false;
+};
+
 // Compare every expected ordered raw row and its box, using the retained source.
 static bool validate_replacement(const char* replacement, const char* source,
-                                  const VocabFile& expected, VocabFile& actual)
+                                  const VocabFile& expected, VocabFile& actual,
+                                  const FileIdentity& identity)
 {
-    if (!scan_sd_index(replacement, actual) || actual.rejected_rows ||
+    FileIdentity readback;
+    if (!scan_sd_index(replacement, actual, readback) || !same_identity(readback, identity) || actual.rejected_rows ||
         actual.line_count != expected.line_count) return false;
     FIL old_file, new_file;
     if (tracked_open(&old_file, source, FA_READ) != FR_OK) return false;
@@ -1114,13 +1180,15 @@ static bool validate_replacement(const char* replacement, const char* source,
     bool ok = true;
     int rank = 0;
     char old_row[VOCAB_RAW_LINE_MAX], new_row[VOCAB_RAW_LINE_MAX];
+    FatFsRawRowReader old_reader(old_file, s_sequential_read_buffer);
+    FatFsRawRowReader new_reader(new_file, s_save_write_buffer);
     for (int box = 1; box <= 5 && ok; ++box) {
         for (int i = 0; i < expected.line_count && ok; ++i) {
             if (expected.field[i] != box) continue;
             int old_len = 0, new_len = 0;
             ok = actual.field[rank] == box &&
-                read_bounded_raw_line(old_file, expected.line_offsets[i], old_row, sizeof old_row, old_len) &&
-                read_bounded_raw_line(new_file, actual.line_offsets[rank], new_row, sizeof new_row, new_len) &&
+                old_reader.read(expected.line_offsets[i], old_row, old_len) &&
+                new_reader.read(actual.line_offsets[rank], new_row, new_len) &&
                 old_len == new_len && std::memcmp(old_row, new_row, old_len) == 0;
             ++rank;
         }
@@ -1132,8 +1200,8 @@ static bool validate_replacement(const char* replacement, const char* source,
 
 class FatFsReplacementOps {
 public:
-    FatFsReplacementOps(const char* original, const char* temporary, const char* backup, const char* journal, const VocabFile& expected) :
-        original_(original), temporary_(temporary), backup_(backup), journal_(journal), expected_(expected) {}
+    FatFsReplacementOps(const char* original, const char* temporary, const char* backup, const char* journal, const VocabFile& expected, const FileIdentity& identity) :
+        identity_(identity), original_(original), temporary_(temporary), backup_(backup), journal_(journal), expected_(expected) {}
 
     bool safe() {
         if (!blocked_ && !transaction_chains_safe(original_, temporary_, backup_, journal_)) blocked_ = true;
@@ -1147,7 +1215,7 @@ public:
         return safe() && tracked_rename(temporary_, original_) == FR_OK;
     }
     bool reindex_replacement() {
-        return safe() && validate_replacement(original_, backup_, expected_, s_reindex_scratch);
+        return safe() && validate_replacement(original_, backup_, expected_, s_reindex_scratch, identity_);
     }
     bool park_failed_replacement() {
         return safe() && tracked_rename(original_, temporary_) == FR_OK;
@@ -1160,6 +1228,7 @@ public:
     }
 
 private:
+    const FileIdentity& identity_;
     const char* original_;
     const char* temporary_;
     const char* backup_;
@@ -1214,15 +1283,13 @@ static bool save_sd_grouped(VocabFile& vf)
         if ((!created || tracked_unlink(tmp_name) == FR_OK)) tracked_unlink(txn_name);
         return fail_and_reopen();
     };
-    if (!write_sd_grouped_temp(vf, tmp_name, created)) return abandon_precommit();
-
     FileIdentity source_before = s_loaded_identity, replacement_identity;
+    if (!write_sd_grouped_temp(vf, tmp_name, created, replacement_identity)) return abandon_precommit();
     bool appended = false;
-    if (!validate_replacement(tmp_name, s_loaded_name, vf, s_reindex_scratch) ||
-        !identify_file(tmp_name, replacement_identity) ||
-        !write_journal(s_loaded_name, tmp_name, txn_name, appended) ||
+    if (!validate_replacement(tmp_name, s_loaded_name, vf, s_reindex_scratch, replacement_identity) ||
+        !write_journal(s_loaded_name, &replacement_identity, txn_name, appended) ||
         matches_file(s_loaded_name, s_loaded_identity) != IdentityMatch::match) return abandon_precommit();
-    FatFsReplacementOps replacement(s_loaded_name, tmp_name, bak_name, txn_name, vf);
+    FatFsReplacementOps replacement(s_loaded_name, tmp_name, bak_name, txn_name, vf, replacement_identity);
     ReplacementOutcome outcome = run_replacement_transaction(replacement);
     // Even a failed rename may have installed its destination entry. Do not
     // roll back, unlink payload/journal, or mark a save clean through an alias.

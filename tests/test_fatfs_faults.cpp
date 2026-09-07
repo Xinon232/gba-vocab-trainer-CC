@@ -8,6 +8,7 @@
 #include <string>
 #include <functional>
 #include <cstdio>
+#include <cstring>
 extern std::string fat_root, corrupt_on_rename, crash_after_rename;
 extern std::function<FRESULT(const std::string&,const std::string&)> fat_hook;
 extern void fat_reset();
@@ -24,6 +25,64 @@ int main(int argc,char** argv){
  auto load=[&](){return vocab_file_load("cards.txt",v,fallback,sizeof fallback,used);};
  auto save=[&](){return vocab_file_save_grouped(v,fallback,used,out,sizeof out,written);};
  assert(load());
+ if(mode=="identity-boundaries"){
+  // Mixed line endings, non-ASCII bytes, a maximum raw row and a final
+  // unterminated row exercise buffered scan/write/readback boundaries.
+  std::string text;
+  for(int i=0;i<40;++i){
+   text += std::string(i==7?188:31, char('a'+i%20))+"\tö";
+   if(i!=39)text += i%2?"\r\n":"\n";
+  }
+  put("cards.txt",text);assert(load());assert(v.line_count==40&&!v.rejected_rows);
+  for(int i=0;i<v.line_count;++i)for(int box=0;box<i%5;++box)vocab_advance(v,i);
+  char expected[8192];int expected_len=vocab_export_grouped(v,text.data(),int(text.size()),expected,sizeof expected);
+  assert(expected_len>0);
+  crash_after_rename="cards.txt";
+  try{save();assert(false);}catch(int){}
+  assert(get("cards.txt")==std::string(expected,expected_len));
+  struct Identity{uint32_t size,hash,sum;};
+  struct Journal{char magic[16],name[VOCAB_FILENAME_MAX];Identity before,after;uint32_t check;};
+  auto reference=[](const std::string& bytes){
+   Identity id{uint32_t(bytes.size()),2166136261u,5381u};
+   for(unsigned char byte:bytes){id.hash=(id.hash^byte)*16777619u;id.sum=id.sum*33u+byte;}
+   return id;
+  };
+  const auto journal=get("cards.txt.gbv1.txn");assert(journal.size()==2*sizeof(Journal));
+  Journal ready;std::memcpy(&ready,journal.data()+sizeof(Journal),sizeof ready);
+  const auto before=reference(text),after=reference(get("cards.txt"));
+  assert(!std::memcmp(&ready.before,&before,sizeof before));
+  assert(!std::memcmp(&ready.after,&after,sizeof after));
+  fat_reset();vocab_file_init();assert(load());assert(v.line_count==40);
+  assert(!exists("cards.txt.gbv1.txn"));
+  vocab_advance(v,0);assert(save());assert(load());
+  puts("PASS buffered identities match independent bytes and recover across boundaries");return 0;
+ }
+ if(mode=="load-truncated-stream"){
+  bool altered=false;
+  fat_hook=[&](auto op,auto p){
+   if(!altered&&op=="read"&&p=="cards.txt"){
+    altered=true;put(p,"a\tb\r\n");
+   }
+   return FR_OK;
+  };
+  assert(!load());assert(altered);assert(v.line_count==2);
+  fat_hook={};assert(load());assert(v.line_count==1);
+  puts("PASS load rejects premature EOF against opened file size");return 0;
+ }
+ if(mode=="output-tail-corruption"){
+  vocab_advance(v,0);
+  bool altered=false;
+  fat_hook=[&](auto op,auto p){
+   if(!altered&&op=="closed"&&p=="cards.txt.gbv1.tmp"){
+    altered=true;put(p,get(p)+"\r\n");
+   }
+   return FR_OK;
+  };
+  assert(!save());assert(altered);assert(get("cards.txt")==original);
+  assert(vocab_any_dirty(v));assert(!vocab_file_save_installed_index());
+  fat_hook={};assert(save());assert(load());
+  printf("PASS physical output identity rejects extra blank tail\n");return 0;
+ }
  if(mode=="reopen-ok" || mode=="reopen-fail"){
   State state;State::InputState input;input.a_pressed=true;state.update(v,input);
   input={};for(int frame=0;frame<20;++frame)state.update(v,input);

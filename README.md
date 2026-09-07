@@ -1,6 +1,6 @@
 # GBA Vocab Trainer
 
-Current source version: **v0.2.8**.
+Current source version: **v0.2.9**.
 
 A simple 5-box vocabulary trainer for the Game Boy Advance, built with Butano and targeted at SuperFW / Supercard SD-style setups.
 
@@ -53,7 +53,7 @@ The importer keeps all five box positions when reopening its own TXT files, incl
 
 Rows must have exactly two nonempty tab-separated fields, with at most 191 content bytes per row. Invalid/overlong rows and entries beyond 10,000 make the loaded source **read-only**, with a visible warning, rather than allowing a save to drop unseen material. Long display text wraps at codepoint boundaries using the selected font's pixel measurements. Both sides fit on one screen, with body-only size reduction when needed (down to half size for extreme entries). Short cards retain their original typography and positions. Both sides are measured together, so revealing the answer never resizes the prompt. TXT content is never shortened to fit the display.
 
-Transient replacement files use `name.txt.gbv1.tmp`, `.gbv1.bak`, and `.gbv1.txn`. Successful saves validate every ordered raw row and box before retiring the backup. Generic same-stem `.tmp`/`.bak` files are never used. Names longer than 54 bytes can be browsed but cannot be saved with the current 64-byte transaction-path buffer; shorten the filename first. See [v0.2.7 I/O notes](docs/file-io-v0.2.7.md) for recovery behavior and verification limitations.
+Transient replacement files use `name.txt.gbv1.tmp`, `.gbv1.bak`, and `.gbv1.txn`. Successful saves validate every ordered raw row and box before retiring the backup. Generic same-stem `.tmp`/`.bak` files are never used. Names longer than 54 bytes can be browsed but cannot be saved with the current 64-byte transaction-path buffer; shorten the filename first. See [v0.2.9 I/O notes](docs/file-io-v0.2.9.md) for buffered identity/validation changes and [recovery details](docs/file-io-v0.2.7.md).
 
 **dict.cc compatibility:** a synthetic file emitted by the actual exporter was uploaded through dict.cc's file input and both Unicode/annotated pairs were read back from Maintain. Vocabulary interchange works, but dict.cc itself trims leading/trailing empty groups and collapses consecutive empty lines: do not expect empty-box learning-state gaps to survive a round trip through the website. The private user sample was not uploaded.
 
@@ -73,7 +73,7 @@ Build:
 make LIBBUTANO=/path/to/butano/butano
 ```
 
-The ROM output is `vocab.gba`. Run the host suite with `bash tests/run_host_tests.sh` (g++, Python 3, and Pillow; no Butano dependency). Install Pillow in your Python environment; CI pins `Pillow==12.3.0`.
+The ROM output is `vocab.gba`. Run correctness tests without the existing I/O performance suite with `bash tests/run_host_tests.sh --correctness-only` (also used by release CI). The original default remains `bash tests/run_host_tests.sh` (g++, Python 3, and Pillow; no Butano dependency). Install Pillow in your Python environment; CI pins `Pillow==12.3.0`.
 
 ## Notes
 
