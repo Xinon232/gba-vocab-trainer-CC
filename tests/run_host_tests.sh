@@ -12,10 +12,14 @@ case "${1:-}" in
 esac
 CXX=${CXX:-g++}
 COMMON=(-std=c++17 -O2 -Wall -Wextra -Iinclude)
-for name in test_vocab test_vocab_10k test_vocab_grouped test_vocab_file_io_perf test_state test_feedback_hold test_integration test_save_status test_empty_boxes test_scan_limits test_long_display test_embedded_control test_switch test_page_input test_save_navigation test_text_layout test_body_pixels; do
+for name in test_vocab test_vocab_10k test_vocab_grouped test_vocab_file_io_perf test_state test_feedback_hold test_integration test_save_status test_empty_boxes test_scan_limits test_scan_visit test_long_display test_embedded_control test_switch test_page_input test_save_navigation test_text_layout test_body_pixels; do
   if $CORRECTNESS_ONLY && [[ "$name" == test_vocab_file_io_perf ]]; then continue; fi
   "$CXX" "${COMMON[@]}" src/vocab.cpp src/vocab_file_io.cpp src/state.cpp "tests/$name.cpp" -o "$BUILD/$name"
   "$BUILD/$name"
+done
+"$CXX" "${COMMON[@]}" -DVOCAB_HOST_FATFS src/vocab.cpp tests/host_fatfs.cpp tests/test_io_windows.cpp -o "$BUILD/io_windows"
+for mode in capacity generated maximum short-scanner short-identity; do
+  "$BUILD/io_windows" "$mode"
 done
 "$CXX" "${COMMON[@]}" -DVOCAB_HOST_FATFS src/vocab.cpp src/vocab_file_io.cpp tests/host_fatfs.cpp tests/test_fatfs_transaction.cpp -o "$BUILD/fatfs"
 "$BUILD/fatfs"

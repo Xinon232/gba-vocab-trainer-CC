@@ -20,10 +20,12 @@ static std::map<FIL*,FILE*> files;
 static std::map<FIL*,std::string> names;
 static std::map<DIR*,std::vector<std::string>> dirs;
 std::string fat_root, corrupt_on_rename, crash_after_rename;
+// Correctness-only fault: successful short reads before physical EOF.
+UINT fat_read_limit = 0;
 // Return FR_OK to continue; hooks may throw to simulate process interruption.
 std::function<FRESULT(const std::string&,const std::string&)> fat_hook;
 static FRESULT hook(const std::string& op,const std::string& p){return fat_hook?fat_hook(op,p):FR_OK;}
-void fat_reset(){for(auto& f:files)fclose(f.second);files.clear();names.clear();dirs.clear();fat_hook={};corrupt_on_rename.clear();crash_after_rename.clear();}
+void fat_reset(){for(auto& f:files)fclose(f.second);files.clear();names.clear();dirs.clear();fat_hook={};fat_read_limit=0;corrupt_on_rename.clear();crash_after_rename.clear();}
 static std::string path(const TCHAR* p){return fat_root+"/"+p;}
 extern "C" {
 FRESULT f_mount(FATFS*,const TCHAR*,BYTE){return FR_OK;}
@@ -36,7 +38,7 @@ FRESULT f_open(FIL* f,const TCHAR* p,BYTE mode){
  return hook("opened",p);
 }
 FRESULT f_close(FIL* f){auto i=files.find(f);if(i==files.end())return FR_INVALID_OBJECT;auto name=names[f];auto r=hook("close",name);if(r!=FR_OK)return r;int e=fclose(i->second);files.erase(i);names.erase(f);return e?FR_DISK_ERR:hook("closed",name);}
-FRESULT f_read(FIL* f,void* b,UINT n,UINT* used){*used=0;auto r=hook("read",names[f]);if(r!=FR_OK)return r;*used=fread(b,1,n,files.at(f));f->fptr+=*used;return ferror(files.at(f))?FR_DISK_ERR:FR_OK;}
+FRESULT f_read(FIL* f,void* b,UINT n,UINT* used){*used=0;auto r=hook("read",names[f]);if(r!=FR_OK)return r;if(fat_read_limit && n>fat_read_limit)n=fat_read_limit;*used=fread(b,1,n,files.at(f));f->fptr+=*used;return ferror(files.at(f))?FR_DISK_ERR:FR_OK;}
 FRESULT f_write(FIL* f,const void* b,UINT n,UINT* used){*used=0;auto r=hook("write",names[f]);if(r!=FR_OK){*used=fwrite(b,1,n>5?5:n,files.at(f));fflush(files.at(f));return r;}*used=fwrite(b,1,n,files.at(f));f->fptr+=*used;f->obj.objsize=f->fptr;if(*used!=n||ferror(files.at(f)))return FR_DISK_ERR;fflush(files.at(f));return hook("wrote",names[f]);}
 FRESULT f_sync(FIL* f){auto r=hook("sync",names[f]);if(r!=FR_OK)return r;return fflush(files.at(f))==0?hook("synced",names[f]):FR_DISK_ERR;}
 FRESULT f_lseek(FIL* f,FSIZE_t n){auto r=hook("seek",names[f]);if(r!=FR_OK)return r;f->fptr=n;return fseek(files.at(f),n,SEEK_SET)==0?FR_OK:FR_DISK_ERR;}

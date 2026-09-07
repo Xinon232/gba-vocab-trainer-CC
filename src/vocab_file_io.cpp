@@ -248,8 +248,15 @@ static bool s_loaded_source_open = false;
 // vocabulary text. Keeping it static places it in normal EWRAM/BSS rather than
 // on the small GBA stack and preserves the live dirty state if reindex fails.
 BN_DATA_EWRAM_BSS static VocabFile s_reindex_scratch;
-BN_DATA_EWRAM_BSS alignas(4) static char s_sequential_read_buffer[512];
-BN_DATA_EWRAM_BSS alignas(4) static char s_save_write_buffer[512];
+// Exclusive workspaces: scanner/identity, output writer, random source rows.
+// Save writing uses output + source; validation uses scanner + source. No
+// scanner, identity helper or writer is invoked while sharing a live window.
+static constexpr UINT IO_WINDOW_BYTES = 4096;
+static constexpr uint32_t IO_SECTOR_BYTES = 512;
+static_assert(IO_WINDOW_BYTES % IO_SECTOR_BYTES == 0, "whole sector windows");
+BN_DATA_EWRAM_BSS alignas(4) static char s_sequential_read_buffer[IO_WINDOW_BYTES];
+BN_DATA_EWRAM_BSS alignas(4) static char s_save_write_buffer[IO_WINDOW_BYTES];
+BN_DATA_EWRAM_BSS alignas(4) static char s_source_row_buffer[IO_WINDOW_BYTES];
 
 static FRESULT tracked_open(FIL* fp, const char* path, BYTE mode)
 {
@@ -642,10 +649,13 @@ public:
     {
         if (buffer_pos_ >= buffer_len_) {
             buffer_start_ = (uint32_t)f_tell(&fp_);
+            if (buffer_start_ > f_size(&fp_)) { failed_ = true; return false; }
+            const FSIZE_t remaining = f_size(&fp_) - buffer_start_;
+            const UINT expected = remaining < IO_WINDOW_BYTES ? UINT(remaining) : IO_WINDOW_BYTES;
             UINT bytes_read = 0;
             FRESULT result = tracked_read(&fp_, s_sequential_read_buffer,
                                           sizeof(s_sequential_read_buffer), &bytes_read);
-            if (result != FR_OK) {
+            if (result != FR_OK || bytes_read != expected) {
                 failed_ = true;
                 return false;
             }
@@ -761,8 +771,12 @@ static bool identify_file(const char* name, FileIdentity& id)
     id = empty_identity();
     bool ok = true;
     while (ok) {
+        if (id.size > f_size(&f)) { ok = false; break; }
+        const FSIZE_t remaining = f_size(&f) - id.size;
+        const UINT expected = remaining < IO_WINDOW_BYTES ? UINT(remaining) : IO_WINDOW_BYTES;
         UINT n = 0;
-        if (tracked_read(&f, s_sequential_read_buffer, sizeof s_sequential_read_buffer, &n) != FR_OK) { ok = false; break; }
+        if (tracked_read(&f, s_sequential_read_buffer, sizeof s_sequential_read_buffer, &n) != FR_OK ||
+            n != expected) { ok = false; break; }
         if (!n) break;
         extend_identity(id, s_sequential_read_buffer, n);
     }
@@ -1049,6 +1063,44 @@ bool vocab_file_show(const VocabFile& vf, const char* fallback_buf, int fallback
 }
 
 #if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
+// A save-scoped source cache. Sector-aligned starts preserve FatFS bulk reads
+// even after backward/shuffled offsets. Never aliases scanner/output storage.
+class FatFsRawRowReader {
+public:
+    explicit FatFsRawRowReader(FIL& fp) : fp_(fp) {}
+    bool read(uint32_t offset, char* row, int& length)
+    {
+        length = 0;
+        while (length < VOCAB_RAW_LINE_MAX) {
+            if (!valid_ || offset < start_ || offset - start_ >= size_) {
+                if (offset >= f_size(&fp_)) {
+                    row[length] = 0;
+                    return length > 0 && length < VOCAB_RAW_LINE_MAX;
+                }
+                valid_ = false;
+                start_ = offset - offset % IO_SECTOR_BYTES;
+                if (tracked_seek(&fp_, start_) != FR_OK) return false;
+                size_ = 0;
+                if (tracked_read(&fp_, s_source_row_buffer, IO_WINDOW_BYTES, &size_) != FR_OK ||
+                    !size_ || (size_ < IO_WINDOW_BYTES && size_ != f_size(&fp_) - start_)) return false;
+                valid_ = true;
+            }
+            char c = s_source_row_buffer[offset++ - start_];
+            if (c == '\r' || c == '\n') {
+                row[length] = 0;
+                return length > 0;
+            }
+            row[length++] = c;
+        }
+        return false;
+    }
+private:
+    FIL& fp_;
+    uint32_t start_ = 0;
+    UINT size_ = 0;
+    bool valid_ = false;
+};
+
 class FatFsBufferedWriter {
 public:
     explicit FatFsBufferedWriter(FIL& fp) : fp_(fp), used_(0), ok_(true) {}
@@ -1080,6 +1132,7 @@ public:
     }
 
     const FileIdentity& identity() const { return identity_; }
+    uint32_t position() const { return identity_.size + uint32_t(used_); }
 
 private:
     FileIdentity identity_ = empty_identity();
@@ -1104,95 +1157,75 @@ static bool write_sd_grouped_temp(const VocabFile& vf, const char* tmp_name, boo
     created = true;
     char line[VOCAB_RAW_LINE_MAX];
     FatFsBufferedWriter writer(out);
+    FatFsRawRowReader reader(in);
+    s_reindex_scratch.reset();
     bool ok = true;
     for (int field = 1; field <= 5 && ok; ++field) {
         for (int i = 0; i < vf.line_count && ok; ++i) {
             if (vf.field[i] != field) continue;
             int line_len = 0;
-            if (!read_bounded_raw_line(in, vf.line_offsets[i], line,
-                                       VOCAB_RAW_LINE_MAX, line_len) ||
+            const uint32_t offset = writer.position();
+            if (!reader.read(vf.line_offsets[i], line, line_len) ||
                 !writer.append(line, line_len) || !writer.append("\r\n", 2)) {
                 ok = false;
+            } else {
+                int rank = s_reindex_scratch.line_count++;
+                s_reindex_scratch.line_offsets[rank] = offset;
+                s_reindex_scratch.field[rank] = uint8_t(field);
+                ++s_reindex_scratch.field_counts[field - 1];
             }
         }
         if (field < 5 && ok && !writer.append("\r\n", 2)) ok = false;
     }
     if (ok && !writer.flush()) ok = false;
-    if (ok) identity = writer.identity();
     if (ok && tracked_sync(&out) != FR_OK) ok = false;
     if (tracked_close(&in) != FR_OK) ok = false;
     if (tracked_close(&out) != FR_OK) ok = false;
+    if (ok) {
+        identity = writer.identity();
+        s_reindex_scratch.loaded = s_reindex_scratch.line_count > 0;
+    }
     return ok;
 }
 
-// Save validation uses two existing scratch windows. Reusing nearby bytes does
-// not change the exact raw-row comparison or permit a short non-EOF row.
-class FatFsRawRowReader {
-public:
-    FatFsRawRowReader(FIL& fp, char* buffer) : fp_(fp), buffer_(buffer) {}
-    bool read(uint32_t offset, char* row, int& length)
-    {
-        length = 0;
-        while (length < VOCAB_RAW_LINE_MAX) {
-            if (!valid_ || offset < start_ || offset - start_ >= size_) {
-                if (offset >= f_size(&fp_)) {
-                    row[length] = 0;
-                    return length > 0 && length < VOCAB_RAW_LINE_MAX;
-                }
-                if (tracked_seek(&fp_, offset) != FR_OK) return false;
-                start_ = offset;
-                size_ = 0;
-                valid_ = false;
-                if (tracked_read(&fp_, buffer_, 512, &size_) != FR_OK || !size_ ||
-                    (size_ < 512 && start_ + size_ != f_size(&fp_))) return false;
-                valid_ = true;
-            }
-            char c = buffer_[offset++ - start_];
-            if (c == '\r' || c == '\n') {
-                row[length] = 0;
-                return length > 0;
-            }
-            row[length++] = c;
-        }
-        return false;
-    }
-private:
-    FIL& fp_;
-    char* buffer_;
-    uint32_t start_ = 0;
-    UINT size_ = 0;
-    bool valid_ = false;
-};
-
-// Compare every expected ordered raw row and its box, using the retained source.
+// Validate the writer-built index and every ordered raw row in the same scan
+// that authenticates physical replacement bytes. No second replacement reader
+// and no additional VocabFile copy; generated offsets are never trusted alone.
 static bool validate_replacement(const char* replacement, const char* source,
-                                  const VocabFile& expected, VocabFile& actual,
+                                  const VocabFile& expected, const VocabFile& actual,
                                   const FileIdentity& identity)
 {
-    FileIdentity readback;
-    if (!scan_sd_index(replacement, actual, readback) || !same_identity(readback, identity) || actual.rejected_rows ||
-        actual.line_count != expected.line_count) return false;
+    if (!actual.loaded || actual.rejected_rows || actual.line_count != expected.line_count ||
+        !vocab_field_counts_valid(actual)) return false;
     FIL old_file, new_file;
     if (tracked_open(&old_file, source, FA_READ) != FR_OK) return false;
     if (tracked_open(&new_file, replacement, FA_READ) != FR_OK) {
         tracked_close(&old_file); return false;
     }
-    bool ok = true;
-    int rank = 0;
-    char old_row[VOCAB_RAW_LINE_MAX], new_row[VOCAB_RAW_LINE_MAX];
-    FatFsRawRowReader old_reader(old_file, s_sequential_read_buffer);
-    FatFsRawRowReader new_reader(new_file, s_save_write_buffer);
-    for (int box = 1; box <= 5 && ok; ++box) {
-        for (int i = 0; i < expected.line_count && ok; ++i) {
-            if (expected.field[i] != box) continue;
-            int old_len = 0, new_len = 0;
-            ok = actual.field[rank] == box &&
-                old_reader.read(expected.line_offsets[i], old_row, old_len) &&
-                new_reader.read(actual.line_offsets[rank], new_row, new_len) &&
-                old_len == new_len && std::memcmp(old_row, new_row, old_len) == 0;
-            ++rank;
-        }
-    }
+    FatFsRawRowReader old_reader(old_file);
+    FatFsSequentialSource readback(new_file);
+    int expected_box = 1, expected_i = 0;
+    uint32_t rejected = 0;
+    ++s_io_stats.index_scans;
+    int loaded = vocab_scan_visit(readback,
+        [&](int rank, uint32_t offset, int box, const char* row, int length) {
+            // Match stable grouping of the live (possibly shuffled) source.
+            while (expected_box <= 5) {
+                while (expected_i < expected.line_count && expected.field[expected_i] != expected_box)
+                    ++expected_i;
+                if (expected_i < expected.line_count) break;
+                ++expected_box;
+                expected_i = 0;
+            }
+            if (rank >= actual.line_count || expected_box > 5 || box != expected_box ||
+                actual.field[rank] != box || actual.line_offsets[rank] != offset) return false;
+            char old_row[VOCAB_RAW_LINE_MAX];
+            int old_length = 0;
+            return old_reader.read(expected.line_offsets[expected_i++], old_row, old_length) &&
+                old_length == length && std::memcmp(old_row, row, length) == 0;
+        }, rejected);
+    bool ok = loaded == expected.line_count && !rejected && !readback.failed() &&
+        readback.identity().size == f_size(&new_file) && same_identity(readback.identity(), identity);
     if (tracked_close(&old_file) != FR_OK) ok = false;
     if (tracked_close(&new_file) != FR_OK) ok = false;
     return ok;

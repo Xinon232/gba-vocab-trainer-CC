@@ -96,7 +96,7 @@ bool parse_line_into(const char* line, int line_len, LineBuf& out);
 // Phase 1 of file open: a buffered streaming pass builds line_offsets[],
 // field[], and field_counts[]. It validates raw row structure only and does not
 // store text, perform font mapping, convert display bytes, or shape Arabic.
-// The SD adapter uses 512-byte FatFS reads; host tests use the same scanner.
+// The SD adapter uses bounded 4KiB FatFS reads; host tests use the same scanner.
 int vocab_open(VocabFile& vf, const char* data, int data_len);
 
 // Phase 2: read and fully parse one physical row only when it must be shown.
