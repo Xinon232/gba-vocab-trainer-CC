@@ -73,7 +73,7 @@ Build:
 make LIBBUTANO=/path/to/butano/butano
 ```
 
-The ROM output is `vocab.gba`. Run the host suite with `bash tests/run_host_tests.sh` (g++ and Python 3; no Butano dependency).
+The ROM output is `vocab.gba`. Run the host suite with `bash tests/run_host_tests.sh` (g++, Python 3, and Pillow; no Butano dependency). Install Pillow in your Python environment; CI pins `Pillow==12.3.0`.
 
 ## Notes
 
