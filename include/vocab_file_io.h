@@ -96,6 +96,11 @@ int vocab_file_scan_buffered_for_tests(const char* data, int data_len, int chunk
 bool vocab_file_save_grouped(VocabFile& vf, const char* fallback_buf, int fallback_used,
                              char* out_buf, int out_len, int& out_used);
 
+// Last save index installation is independent of the reopen/success boolean.
+// Callers must remap navigation whenever true, including a failed list switch.
+bool vocab_file_save_installed_index();
+const char* vocab_file_last_error();
+
 // Backwards-compatible small-sample helpers used by older tests.
 bool vocab_file_read_builtin_or_stub(const char* filename, char* out, int out_len, int& out_used);
 bool vocab_file_export_grouped_stub(const VocabFile& vf, const char* source, int source_len,

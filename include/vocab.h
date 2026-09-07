@@ -23,9 +23,9 @@
 // offsets, fields, and dirty flags are kept in EWRAM.
 constexpr int VOCAB_MAX_LINES = 10000;
 
-// Max length of a single word (source or target). Real dict.cc samples
-// reached 67/77 bytes per side, so keep 96 bytes per side.
-constexpr int VOCAB_LINE_MAX = 96;
+// A raw field can occupy nearly the whole row; conversion/shaping may expand
+// each byte to three display bytes. Text remains one-card scratch, not per row.
+constexpr int VOCAB_LINE_MAX = 576;
 
 // Max physical line length accepted by the importer/exporter scratch path.
 constexpr int VOCAB_RAW_LINE_MAX = 192;
@@ -59,6 +59,7 @@ struct VocabFile {
     uint16_t field_counts[5];
 
     int line_count;       // number of valid lines (≤ VOCAB_MAX_LINES)
+    uint32_t rejected_rows; // Any unseen row makes source read-only.
     bool loaded;          // true after a successful vocab_open
 
     // Incremented whenever line records are reordered. The bounded
@@ -67,6 +68,7 @@ struct VocabFile {
     uint32_t array_generation;
 
     void reset() {
+        rejected_rows = 0;
         line_count = 0;
         loaded = false;
         array_generation = 0;

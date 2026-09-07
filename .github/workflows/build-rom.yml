@@ -3,14 +3,21 @@ name: Build GBA ROM
 on:
   push:
     branches:
-      - release/v0.2.6
+      - release/v0.2.7
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  host-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run complete host suite
+        run: bash tests/run_host_tests.sh
   build:
+    needs: host-tests
     runs-on: ubuntu-latest
     container: devkitpro/devkitarm:20260610
     steps:
@@ -32,6 +39,6 @@ jobs:
       - name: Upload complete ROM
         uses: actions/upload-artifact@v4
         with:
-          name: gba-vocab-trainer-v0.2.6
+          name: gba-vocab-trainer-v0.2.7
           path: vocab.gba
           if-no-files-found: error

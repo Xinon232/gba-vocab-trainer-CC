@@ -63,6 +63,7 @@ static State::InputState read_input()
     in.b_held          = bn::keypad::b_held();
     in.r_held          = bn::keypad::r_held();
     in.l_pressed       = bn::keypad::l_pressed();
+    in.l_held          = bn::keypad::l_held();
     in.start_pressed   = bn::keypad::start_pressed();
     in.select_pressed  = bn::keypad::select_pressed();
     in.left_pressed    = bn::keypad::left_pressed();
@@ -74,6 +75,10 @@ static State::InputState read_input()
 
 static void render_current_frame(Renderer& renderer, State& state)
 {
+    if (state.switch_confirm_active()) {
+        renderer.update_switch_confirm();
+        return;
+    }
     if (state.scene() == 1) {
         renderer.update_browser(state);
         return;
@@ -83,16 +88,21 @@ static void render_current_frame(Renderer& renderer, State& state)
         return;
     }
 
+    renderer.set_text_page(state.text_page());
     int idx = state.current_line_idx();
     if (idx < 0 || idx >= g_vocab_file.line_count) idx = 0;
 
-    LineBuf current;
+    LineBuf current = {};
     bool field_empty = !state.feedback_active() && state.current_field_is_empty(g_vocab_file);
     if (vocab_file_show(g_vocab_file, g_builtin_vocab, g_builtin_vocab_used,
                         idx, current) || field_empty) {
         renderer.update(g_vocab_file, idx, state.current_field(),
                         current, state.active_side(), state.direction_mode() == 3,
                         state.show_answer(), field_empty, state.feedback_active());
+        state.set_text_page_count(renderer.text_page_count());
+    } else {
+        state.set_text_page_count(1);
+        renderer.update_message("READ ERROR / text too long");
     }
 }
 
@@ -116,8 +126,8 @@ int main()
             int grouped_idx_after_save = -1;
             int idx_before_save = state.current_line_idx();
             if (vocab_file_loaded_from_sd() &&
-                idx_before_save >= 0 && idx_before_save < g_vocab_file.line_count &&
-                !state.current_field_is_empty(g_vocab_file)) {
+                (vocab_any_dirty(g_vocab_file) || g_vocab_file.array_generation) &&
+                idx_before_save >= 0 && idx_before_save < g_vocab_file.line_count) {
                 grouped_idx_after_save = grouped_save_index_for_line(g_vocab_file, idx_before_save);
             }
 
@@ -128,23 +138,42 @@ int main()
             bool saved = vocab_file_save_grouped(g_vocab_file, g_builtin_vocab, g_builtin_vocab_used,
                                                  g_export_buffer, VOCAB_EXPORT_BUFFER_LEN,
                                                  g_export_buffer_used);
-            if (saved && grouped_idx_after_save >= 0) {
+            if (vocab_file_save_installed_index()) {
                 state.restore_current_line_index(g_vocab_file, grouped_idx_after_save);
             }
 
+            renderer.set_save_error(vocab_file_last_error());
             renderer.set_save_status(saved ? SaveStatus::IDLE : SaveStatus::FAILED);
             renderer.reset();
         }
 
         if (state.scene() != last_scene) {
+            renderer.set_notice(nullptr);
             renderer.reset();
             last_scene = state.scene();
         }
 
         if (state.load_request_pending()) {
+            renderer.set_notice(nullptr); // fresh operation, before any new failure
+            bool proceed = true;
+            if (state.save_before_load()) {
+                int grouped_idx = grouped_save_index_for_line(g_vocab_file, state.current_line_idx());
+                renderer.update_message("Saving...");
+                bn::core::update();
+                proceed = vocab_file_save_grouped(g_vocab_file, g_builtin_vocab, g_builtin_vocab_used,
+                    g_export_buffer, VOCAB_EXPORT_BUFFER_LEN, g_export_buffer_used);
+                if (vocab_file_save_installed_index()) state.restore_current_line_index(g_vocab_file, grouped_idx);
+                renderer.set_save_error(vocab_file_last_error());
+                renderer.set_save_status(proceed ? SaveStatus::IDLE : SaveStatus::FAILED);
+            }
             const char* filename = state.consume_load_request();
-            if (load_selected_vocab(filename)) {
+            if (proceed && load_selected_vocab(filename)) {
+                state = State(); // new list: reset navigation, undo, feedback and paging
+                renderer.set_notice(nullptr);
+                renderer.set_save_status(SaveStatus::IDLE);
                 renderer.reset();
+            } else {
+                renderer.set_notice(proceed ? "LOAD FAILED" : "SAVE FAILED - not switched");
             }
         }
 

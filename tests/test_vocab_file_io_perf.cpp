@@ -65,11 +65,11 @@ static int test_transaction_failures()
     near_max[VOCAB_FILENAME_MAX - 2] = 't';
     near_max[VOCAB_FILENAME_MAX - 1] = 0;
     char sidecar[VOCAB_FILENAME_MAX];
-    if (!vocab_file_sidecar_name_for_tests(near_max, ".bak", sidecar) ||
-        std::strlen(sidecar) != std::strlen(near_max) ||
-        std::strcmp(sidecar + std::strlen(sidecar) - 4, ".bak") != 0) {
-        return fail("near-limit sidecar path truncated or malformed");
+    if (vocab_file_sidecar_name_for_tests(near_max, ".bak", sidecar)) {
+        return fail("near-limit name must refuse save rather than truncate ownership suffix");
     }
+    if (!vocab_file_sidecar_name_for_tests("cards.txt", ".bak", sidecar) ||
+        std::strcmp(sidecar, "cards.txt.gbv1.bak")) return fail("owned backup naming failed");
     return 0;
 }
 
@@ -243,8 +243,8 @@ int main()
     }
     int scanned_count = vocab_file_scan_buffered_for_tests(
         edge_data, (int)std::strlen(edge_data), 7, scanned, read_calls);
-    if (scanned_count != 3 || scanned.field_counts[0] != 1 ||
-        scanned.field_counts[1] != 1 || scanned.field_counts[2] != 1) {
+    if (scanned_count != 3 || scanned.field_counts[0] != 2 ||
+        scanned.field_counts[1] != 0 || scanned.field_counts[2] != 1 || scanned.rejected_rows != 2) {
         return fail("chunked scan changed grouped/EOF semantics");
     }
     if (scanned.line_offsets[0] != 0 ||
@@ -269,7 +269,7 @@ int main()
         }
     }
 
-    std::string overlong(191, 'x');
+    std::string overlong(192, 'x');
     overlong[90] = '\t';
     overlong += "\nvalid\trow\n";
     scanned_count = vocab_file_scan_buffered_for_tests(
@@ -308,14 +308,12 @@ int main()
     if (large_output_bytes != 300008) {
         return fail("grouped output byte profile changed unexpectedly");
     }
-    int buffered_write_calls = (large_output_bytes + 511) / 512;
 
     std::printf("Render cache profile: first frame %u read/%u parse; 120 repeats +0/+0\n",
                 unchanged_frames.read_calls, unchanged_frames.full_display_parses);
     std::printf("Buffered scan profile: %zu bytes, %d cards, %d bulk reads\n",
                 large.size(), scanned_count, read_calls);
-    std::printf("Buffered save profile: %d bytes, %d writes (legacy small-write path: 10004)\n",
-                large_output_bytes, buffered_write_calls);
+    std::printf("Host grouped export: %d bytes (memory only)\n", large_output_bytes);
 
     if (!vocab_file_load("builtin.txt", vf, source, sizeof(source), source_used)) {
         return fail("reload before changed-save test failed");

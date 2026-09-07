@@ -1,16 +1,21 @@
 // vocab_file_io.cpp — SD/FatFS streaming implementation.
 
 #include "vocab_file_io.h"
+#include "vocab_scanner.h"
 
 #include <cstring>
 
-#ifdef __DEVKITARM__
-#include "bn_core.h"
+#if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
 #include "fatfs/ff.h"
+#ifdef VOCAB_HOST_FATFS
+#define BN_DATA_EWRAM_BSS
+#else
+#include "bn_core.h"
 #include "gbahw.h"
 extern "C" {
 #include "supercard_driver.h"
 }
+#endif
 #endif
 
 static char s_names[VOCAB_MAX_BROWSER_FILES][VOCAB_FILENAME_MAX];
@@ -20,6 +25,10 @@ static bool s_loaded_from_sd = false;
 static char s_loaded_name[VOCAB_FILENAME_MAX];
 static uint32_t s_loaded_generation = 0;
 static VocabIoStats s_io_stats = {};
+static bool s_save_installed_index = false;
+static const char* s_last_error = "SD I/O ERROR";
+bool vocab_file_save_installed_index() { return s_save_installed_index; }
+const char* vocab_file_last_error() { return s_last_error; }
 
 void vocab_file_io_reset_stats()
 {
@@ -38,7 +47,7 @@ static bool s_card_cache_valid = false;
 static uint32_t s_card_cache_loaded_generation = 0;
 static uint32_t s_card_cache_array_generation = 0;
 static uint32_t s_card_cache_offset = 0;
-#ifdef __DEVKITARM__
+#if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
 BN_DATA_EWRAM_BSS static LineBuf s_card_cache_line;
 #else
 static LineBuf s_card_cache_line;
@@ -95,6 +104,7 @@ static bool finalize_committed_save(VocabFile& live, const VocabFile& reindexed,
     // The replacement is already the authoritative TXT. Install its validated
     // offsets before reopening so a transient reopen failure can never make a
     // retry apply old offsets to the newly grouped file.
+    s_save_installed_index = true;
     live = reindexed;
     vocab_clear_dirty(live);
     live.array_generation = 0;
@@ -135,24 +145,24 @@ VocabIoStats vocab_file_persistent_source_for_tests()
 }
 #endif
 
+enum class ReplacementOutcome { committed, restored, recovery_required };
 template<typename Ops>
-static bool run_replacement_transaction(Ops& ops)
+static ReplacementOutcome run_replacement_transaction(Ops& ops)
 {
-    if (!ops.rename_original_to_backup()) return false;
+    if (!ops.rename_original_to_backup()) return ReplacementOutcome::restored;
     if (!ops.rename_temporary_to_original()) {
-        ops.restore_backup();
-        return false;
+        return ops.restore_backup() ? ReplacementOutcome::restored : ReplacementOutcome::recovery_required;
     }
     if (!ops.reindex_replacement()) {
-        if (ops.park_failed_replacement()) ops.restore_backup();
-        return false;
+        return ops.park_failed_replacement() && ops.restore_backup() ?
+            ReplacementOutcome::restored : ReplacementOutcome::recovery_required;
     }
     // The replacement has already been validated and is now the authoritative
     // TXT. Failure to remove the backup is a recoverable cleanup condition, not
     // a failed save: treating it as retryable would apply stale offsets to the
     // newly grouped file. Startup/reload recovery removes a leftover backup.
     ops.remove_backup();
-    return true;
+    return ReplacementOutcome::committed;
 }
 
 #ifndef __DEVKITARM__
@@ -220,7 +230,7 @@ VocabTransactionTestResult vocab_file_transaction_for_tests(VocabIoFailurePoint 
     }
 
     HostTransactionOps ops(failure);
-    result.success = run_replacement_transaction(ops);
+    result.success = run_replacement_transaction(ops) == ReplacementOutcome::committed;
     result.dirty = !result.success;
     result.original_valid = ops.original();
     result.backup_valid = ops.backup();
@@ -230,7 +240,7 @@ VocabTransactionTestResult vocab_file_transaction_for_tests(VocabIoFailurePoint 
 }
 #endif
 
-#ifdef __DEVKITARM__
+#if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
 static FATFS s_fatfs;
 BN_DATA_EWRAM_BSS static FIL s_loaded_source;
 static bool s_loaded_source_open = false;
@@ -333,7 +343,7 @@ static bool has_txt_ext(const char* name)
 }
 
 static bool make_sidecar_name(const char* original, const char* suffix,
-                              char out[VOCAB_FILENAME_MAX])
+                              char out[VOCAB_FILENAME_MAX], int slot = 1)
 {
     if (!original || !suffix || !has_txt_ext(original)) return false;
     int len = 0;
@@ -345,10 +355,11 @@ static bool make_sidecar_name(const char* original, const char* suffix,
     if (len < 4 || suffix[0] != '.' || !suffix[1] || !suffix[2] || !suffix[3] || suffix[4]) {
         return false;
     }
-    out[len - 4] = suffix[0];
-    out[len - 3] = suffix[1];
-    out[len - 2] = suffix[2];
-    out[len - 1] = suffix[3];
+    char owner[] = ".gbv1";
+    owner[4] = char('0' + slot);
+    if (len + 9 >= VOCAB_FILENAME_MAX) return false;
+    for (int i = 0; i < 5; ++i) out[len++] = owner[i];
+    for (int i = 0; i < 4; ++i) out[len++] = suffix[i];
     out[len] = 0;
     return !str_eq_local(original, out);
 }
@@ -460,17 +471,28 @@ static void set_loaded_name(const char* filename)
     s_loaded_name[i] = 0;
 }
 
-#ifdef __DEVKITARM__
+#if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
+static bool recover_sd_sidecars(const char* filename);
 static void scan_sd_root()
 {
     DIR dir;
     FILINFO info;
     if (f_opendir(&dir, "/") != FR_OK) return;
-    while (s_name_count < VOCAB_MAX_BROWSER_FILES) {
+    while (true) {
         if (f_readdir(&dir, &info) != FR_OK) break;
         if (!info.fname[0]) break;
-        if ((info.fattrib & AM_DIR) == 0 && has_txt_ext(info.fname)) {
-            add_name(info.fname);
+        if ((info.fattrib & AM_DIR) == 0) {
+            if (has_txt_ext(info.fname)) add_name(info.fname);
+            int len = int(std::strlen(info.fname));
+            if (len > 9 && len < VOCAB_FILENAME_MAX &&
+                std::memcmp(info.fname + len - 9, ".gbv", 4) == 0 &&
+                info.fname[len - 5] >= '1' && info.fname[len - 5] <= '9' &&
+                std::memcmp(info.fname + len - 4, ".txn", 4) == 0) {
+                char original[VOCAB_FILENAME_MAX];
+                std::memcpy(original, info.fname, len - 9);
+                original[len - 9] = 0;
+                if (has_txt_ext(original) && recover_sd_sidecars(original)) add_name(original);
+            }
         }
     }
     f_closedir(&dir);
@@ -480,18 +502,26 @@ static void scan_sd_root()
 bool vocab_file_init()
 {
     s_name_count = 0;
+#if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
+    close_loaded_source();
+    s_loaded_source_open = false;
+#endif
     s_loaded_from_sd = false;
     s_loaded_name[0] = 0;
-#ifdef __DEVKITARM__
+#if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
     // SuperFW initializes the SuperCard hardware before mounting FatFS:
     // faster WAITCNT, map SDRAM, enable SD interface, then run sdcard_init.
     // Without this the hardware probe stalls for a few seconds and mount
     // falls back to the ROM sample list.
+#ifdef VOCAB_HOST_FATFS
+    s_sd_ready = f_mount(&s_fatfs, "0:", 1) == FR_OK;
+#else
     REG_WAITCNT = 0x40c0;
     set_supercard_mode(MAPPED_SDRAM, true, true);
     t_card_info sd_info;
     unsigned sd_ret = sdcard_init(&sd_info);
     s_sd_ready = (sd_ret == 0) && (f_mount(&s_fatfs, "0:", 1) == FR_OK);
+ #endif
     if (s_sd_ready) {
         scan_sd_root();
     }
@@ -520,82 +550,10 @@ const char* vocab_file_name(int index)
     return s_names[index];
 }
 
-static bool line_is_blank(const char* line, int line_len)
-{
-    for (int i = 0; i < line_len; i++) {
-        char ch = line[i];
-        if (ch != ' ' && ch != '\t' && ch != '\r' && ch != '\n') return false;
-    }
-    return true;
-}
-
 template<typename Source>
 static int scan_sequential_source(Source& source, VocabFile& vf)
 {
-    vf.reset();
-    int loaded = 0;
-    int current_field = 1;
-    bool had_valid_in_current_group = false;
-    bool pending_group_advance = false;
-    char line[VOCAB_RAW_LINE_MAX];
-
-    while (loaded < VOCAB_MAX_LINES) {
-        uint32_t line_offset = 0;
-        int line_len = 0;
-        bool got_any = false;
-        bool ended_with_newline = false;
-        bool overflow = false;
-        char ch = 0;
-        uint32_t absolute_offset = 0;
-
-        while (source.next(ch, absolute_offset)) {
-            if (!got_any) {
-                got_any = true;
-                line_offset = absolute_offset;
-            }
-            if (ch == '\n') {
-                ended_with_newline = true;
-                break;
-            }
-            if (line_len < VOCAB_RAW_LINE_MAX - 1) {
-                line[line_len++] = ch;
-            } else {
-                overflow = true;
-            }
-        }
-        if (!got_any) break;
-
-        // A newline-terminated row needs one byte of headroom for the newline
-        // in the bounded one-row read path. A final 191-byte row without a
-        // newline remains representable and valid.
-        if (ended_with_newline && line_len == VOCAB_RAW_LINE_MAX - 1) {
-            overflow = true;
-        }
-        line[line_len] = 0;
-        if (overflow) continue;
-
-        if (line_is_blank(line, line_len)) {
-            if (had_valid_in_current_group) pending_group_advance = true;
-            continue;
-        }
-
-        if (vocab_validate_raw_row(line, line_len)) {
-            if (pending_group_advance) {
-                if (current_field < 5) current_field++;
-                pending_group_advance = false;
-                had_valid_in_current_group = false;
-            }
-            vf.line_offsets[loaded] = line_offset;
-            vf.field[loaded] = (uint8_t)current_field;
-            vf.field_counts[current_field - 1]++;
-            had_valid_in_current_group = true;
-            ++loaded;
-        }
-    }
-
-    vf.line_count = loaded;
-    vf.loaded = loaded > 0;
-    return loaded;
+    return vocab_scan(source, vf);
 }
 
 #ifndef __DEVKITARM__
@@ -655,7 +613,7 @@ int vocab_file_scan_buffered_for_tests(const char* data, int data_len, int chunk
 }
 #endif
 
-#ifdef __DEVKITARM__
+#if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
 class FatFsSequentialSource {
 public:
     explicit FatFsSequentialSource(FIL& fp) :
@@ -709,97 +667,269 @@ static bool scan_sd_index(const char* filename, VocabFile& vf)
     return true;
 }
 
-static bool open_sd_streaming(const char* filename, VocabFile& vf)
-{
-    if (!scan_sd_index(filename, vf)) return false;
-    set_loaded_name(filename);
-    if (!ensure_loaded_source_open()) {
-        vf.reset();
-        return false;
-    }
-    s_loaded_from_sd = true;
-    return true;
-}
-
-static bool path_exists(const char* path)
+enum class Presence { missing, present, error };
+static Presence probe_path(const char* path)
 {
     FILINFO info;
-    return f_stat(path, &info) == FR_OK;
+    FRESULT r = f_stat(path, &info);
+    if (r == FR_OK) return Presence::present;
+    if (r == FR_NO_FILE || r == FR_NO_PATH) return Presence::missing;
+    return Presence::error;
 }
 
-static bool recover_sd_sidecars(const char* filename)
+// FatFS rename can copy a directory entry before removing the old entry. Two
+// names may then own the same chain: unlinking either frees BOTH files' data.
+// Content equality is not enough. Probe every transaction name before mutation,
+// including the journal; never repair FAT or guess through an I/O error.
+enum class ChainCheck { distinct, alias, error };
+static ChainCheck check_transaction_chains(const char* original, const char* tmp,
+                                           const char* bak, const char* txn)
 {
-    char tmp[VOCAB_FILENAME_MAX];
-    char bak[VOCAB_FILENAME_MAX];
-    if (!make_sidecar_name(filename, ".tmp", tmp) ||
-        !make_sidecar_name(filename, ".bak", bak)) return false;
-
-    bool original_exists = path_exists(filename);
-    bool backup_exists = path_exists(bak);
-    bool temp_exists = path_exists(tmp);
-    VocabFile& probe = s_reindex_scratch;
-
-    if (!original_exists && backup_exists) {
-        if (!scan_sd_index(bak, probe)) return false;
-        if (tracked_rename(bak, filename) != FR_OK) return false;
-        original_exists = true;
-        backup_exists = false;
-    }
-
-    if (original_exists && backup_exists) {
-        if (scan_sd_index(filename, probe)) {
-            if (tracked_unlink(bak) != FR_OK) return false;
-            backup_exists = false;
-        } else {
-            if (!scan_sd_index(bak, probe) || temp_exists) return false;
-            if (tracked_rename(filename, tmp) != FR_OK) return false;
-            if (tracked_rename(bak, filename) != FR_OK) {
-                tracked_rename(tmp, filename);
-                return false;
-            }
-            temp_exists = true;
-            backup_exists = false;
+    const char* paths[] = {original, tmp, bak, txn};
+    FATFS* volumes[4] = {};
+    DWORD clusters[4] = {};
+    for (int i = 0; i < 4; ++i) {
+        Presence p = probe_path(paths[i]);
+        if (p == Presence::error) return ChainCheck::error;
+        if (p == Presence::missing) continue;
+        FIL f;
+        if (tracked_open(&f, paths[i], FA_READ) != FR_OK) return ChainCheck::error;
+        volumes[i] = f.obj.fs;
+        clusters[i] = f.obj.sclust;
+        // Zero is legitimate only for an unallocated empty file; it is not a
+        // shared chain. A nonempty file without a chain is unsafe to mutate.
+        bool valid = volumes[i] && (clusters[i] >= 2 || (!clusters[i] && !f_size(&f)));
+        if (tracked_close(&f) != FR_OK || !valid) return ChainCheck::error;
+        for (int k = 0; k < i; ++k) {
+            if (clusters[i] && clusters[i] == clusters[k] && volumes[i] == volumes[k])
+                return ChainCheck::alias;
         }
     }
+    return ChainCheck::distinct;
+}
+static bool transaction_chains_safe(const char* original, const char* tmp,
+                                     const char* bak, const char* txn)
+{
+    if (check_transaction_chains(original, tmp, bak, txn) == ChainCheck::distinct) return true;
+    s_last_error = "RECOVERY REQUIRED";
+    return false;
+}
 
-    // A temporary is stale only after a structurally valid original is proven.
-    if (original_exists && !backup_exists && temp_exists) {
-        if (!scan_sd_index(filename, probe)) return false;
+// Transient transaction identity. Checksums cover all physical bytes, including
+// separators and EOF; row-count-only validation cannot identify a complete file.
+struct FileIdentity { uint32_t size, hash, sum; };
+static FileIdentity s_loaded_identity;
+static bool s_source_verified = true;
+struct SaveJournal {
+    char magic[16];
+    char original[VOCAB_FILENAME_MAX];
+    FileIdentity before, after;
+    uint32_t check;
+};
+static uint32_t journal_check(const SaveJournal& j)
+{
+    const unsigned char* p = reinterpret_cast<const unsigned char*>(&j);
+    uint32_t h = 2166136261u;
+    for (unsigned i = 0; i < sizeof(j) - sizeof(j.check); ++i) h = (h ^ p[i]) * 16777619u;
+    return h;
+}
+static bool identify_file(const char* name, FileIdentity& id)
+{
+    FIL f;
+    if (tracked_open(&f, name, FA_READ) != FR_OK) return false;
+    id = {0, 2166136261u, 5381u};
+    bool ok = true;
+    while (ok) {
+        UINT n = 0;
+        if (tracked_read(&f, s_sequential_read_buffer, sizeof s_sequential_read_buffer, &n) != FR_OK) { ok = false; break; }
+        if (!n) break;
+        id.size += n;
+        for (UINT i = 0; i < n; ++i) {
+            unsigned char c = s_sequential_read_buffer[i];
+            id.hash = (id.hash ^ c) * 16777619u;
+            id.sum = id.sum * 33u + c;
+        }
+    }
+    if (tracked_close(&f) != FR_OK) ok = false;
+    return ok;
+}
+enum class IdentityMatch { match, mismatch, error };
+static IdentityMatch matches_file(const char* name, const FileIdentity& expected)
+{
+    FileIdentity actual;
+    if (!identify_file(name, actual)) return IdentityMatch::error;
+    return actual.size == expected.size && actual.hash == expected.hash && actual.sum == expected.sum ?
+        IdentityMatch::match : IdentityMatch::mismatch;
+}
+static bool write_journal(const char* filename, const char* temporary, const char* journal_name, bool& created)
+{
+    SaveJournal j = {};
+    created = false;
+    std::memcpy(j.magic, temporary ? "GBAVOCAB-TXN-1" : "GBAVOCAB-TXN-2", 14);
+    std::memcpy(j.original, filename, std::strlen(filename) + 1);
+    j.before = s_loaded_identity;
+    if (temporary && !identify_file(temporary, j.after)) return false;
+    j.check = journal_check(j);
+    FIL f;
+    if (tracked_open(&f, journal_name, FA_WRITE | (temporary ? FA_OPEN_EXISTING : FA_CREATE_NEW)) != FR_OK) return false;
+    created = !temporary;
+    if (temporary && tracked_seek(&f, sizeof j) != FR_OK) { tracked_close(&f); return false; }
+    UINT n = 0;
+    bool ok = tracked_write(&f, &j, sizeof j, &n) == FR_OK && n == sizeof j;
+    if (ok && tracked_sync(&f) != FR_OK) ok = false;
+    if (tracked_close(&f) != FR_OK) ok = false;
+    return ok;
+}
+enum class JournalRead { valid, invalid, error };
+static JournalRead read_journal(const char* path, const char* filename, SaveJournal& j, bool final = false)
+{
+    FIL f;
+    if (tracked_open(&f, path, FA_READ) != FR_OK) return JournalRead::error;
+    UINT n = 0;
+    bool size_ok = final ? f_size(&f) == 2 * sizeof j : f_size(&f) >= sizeof j;
+    bool io_ok = (!final || tracked_seek(&f, sizeof j) == FR_OK) && tracked_read(&f, &j, sizeof j, &n) == FR_OK;
+    if (tracked_close(&f) != FR_OK) io_ok = false;
+    if (!io_ok) return JournalRead::error;
+    if (!size_ok || n != sizeof j ||
+        std::memcmp(j.magic, "GBAVOCAB-TXN-", 13) ||
+        (j.magic[13] != 0 && j.magic[13] != '1' && j.magic[13] != '2') ||
+        j.check != journal_check(j) || std::memcmp(j.original, filename, std::strlen(filename) + 1))
+        return JournalRead::invalid;
+    return JournalRead::valid;
+}
+static bool recover_candidate(const char* filename, int slot)
+{
+    char tmp[VOCAB_FILENAME_MAX], bak[VOCAB_FILENAME_MAX], txn[VOCAB_FILENAME_MAX];
+    if (!make_sidecar_name(filename, ".tmp", tmp, slot) ||
+        !make_sidecar_name(filename, ".bak", bak, slot) ||
+        !make_sidecar_name(filename, ".txn", txn, slot)) return probe_path(filename) == Presence::present;
+    // Names alone never prove ownership. Legacy generic .bak/.tmp are not used.
+    if (probe_path(txn) == Presence::error) return false;
+    if (probe_path(txn) == Presence::missing) return probe_path(filename) == Presence::present;
+    if (!transaction_chains_safe(filename, tmp, bak, txn)) return false;
+    SaveJournal j = {};
+    JournalRead jr = read_journal(txn, filename, j);
+    if (jr == JournalRead::error) return false;
+    // A torn initialization cannot prove ownership. Preserve it byte-for-byte;
+    // another bounded transaction slot makes the intact source retryable.
+    if (jr == JournalRead::invalid) return true;
+    bool reservation = j.magic[13] == '2';
+    if (reservation) {
+        SaveJournal final = {};
+        JournalRead fr = read_journal(txn, filename, final, true);
+        if (fr == JournalRead::error) return false;
+        if (fr == JournalRead::valid && final.magic[13] == '1' &&
+            std::memcmp(&final.before, &j.before, sizeof j.before) == 0) {
+            j = final;
+        } else {
+            // The durable reservation precedes payload CREATE_NEW. No original
+            // rename is permitted until a complete ready record is durable.
+            Presence pb = probe_path(bak), pt = probe_path(tmp);
+            if (pb != Presence::missing || pt == Presence::error) return false;
+            Presence po = probe_path(filename);
+            if (po == Presence::error) return false;
+            if (po == Presence::missing) return true; // a later slot may own the backup
+            IdentityMatch original = matches_file(filename, j.before);
+            if (original == IdentityMatch::error) return false;
+            // A crash before CREATE_NEW returned cannot distinguish an empty
+            // owned payload from a collision. Preserve all incomplete payloads
+            // (and their reservation) and retry in another slot, never guess.
+            if (pt == Presence::present || original != IdentityMatch::match) return true;
+            return tracked_unlink(txn) == FR_OK;
+        }
+    }
+    // Finish every probe and identity read before any destructive action. An
+    // unreadable original is not evidence that a backup should replace it.
+    Presence po = probe_path(filename), pb = probe_path(bak), pt = probe_path(tmp);
+    if (po == Presence::error || pb == Presence::error || pt == Presence::error) return false;
+    IdentityMatch before = po == Presence::present ? matches_file(filename, j.before) : IdentityMatch::mismatch;
+    IdentityMatch after = po == Presence::present ? matches_file(filename, j.after) : IdentityMatch::mismatch;
+    IdentityMatch backup = pb == Presence::present ? matches_file(bak, j.before) : IdentityMatch::mismatch;
+    IdentityMatch temp = pt == Presence::present ? matches_file(tmp, j.after) : IdentityMatch::mismatch;
+    if (before == IdentityMatch::error || after == IdentityMatch::error ||
+        backup == IdentityMatch::error || temp == IdentityMatch::error) return false;
+    if (pb == Presence::present && backup != IdentityMatch::match) return false;
+    if (before != IdentityMatch::match && after != IdentityMatch::match) {
+        if (backup != IdentityMatch::match) return pb == Presence::missing && po == Presence::present;
+        if (po == Presence::present) {
+            if (pt == Presence::present) {
+                if (temp != IdentityMatch::match || tracked_unlink(tmp) != FR_OK) return false;
+            }
+            if (tracked_rename(filename, tmp) != FR_OK) return false;
+            pt = Presence::present;
+            temp = IdentityMatch::mismatch; // parked material is retained
+        }
+        if (tracked_rename(bak, filename) != FR_OK) return false;
+        pb = Presence::missing;
+    }
+    if (!transaction_chains_safe(filename, tmp, bak, txn)) return false;
+    if (pb == Presence::present && tracked_unlink(bak) != FR_OK) return false;
+    if (pt == Presence::present) {
+        if (temp != IdentityMatch::match) return true; // unknown material retained
         if (tracked_unlink(tmp) != FR_OK) return false;
     }
-    return original_exists;
+    return tracked_unlink(txn) == FR_OK;
+}
+static bool recover_sd_sidecars(const char* filename)
+{
+    // Recover existing journals before checking original presence: a later slot
+    // may own the backup of a temporarily missing original.
+    for (int slot = 1; slot <= 9; ++slot) {
+        char txn[VOCAB_FILENAME_MAX];
+        if (!make_sidecar_name(filename, ".txn", txn, slot)) break;
+        Presence p = probe_path(txn);
+        if (p == Presence::error) return false;
+        if (p == Presence::present && !recover_candidate(filename, slot)) return false;
+    }
+    return probe_path(filename) == Presence::present;
 }
 #endif
 
 bool vocab_file_load(const char* filename, VocabFile& vf,
                      char* fallback_buf, int fallback_len, int& fallback_used)
 {
-#ifdef __DEVKITARM__
-    // File switches and recovery never leave an old handle attached to a path
-    // that may be renamed or replaced.
+#if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
+    if (s_sd_ready && filename && has_txt_ext(filename) && !str_eq_local(filename, "builtin.txt")) {
+        FileIdentity candidate_identity;
+        if (!recover_sd_sidecars(filename) || !identify_file(filename, candidate_identity) ||
+            !scan_sd_index(filename, s_reindex_scratch) ||
+            matches_file(filename, candidate_identity) != IdentityMatch::match) return false;
+        char previous[VOCAB_FILENAME_MAX];
+        std::memcpy(previous, s_loaded_name, sizeof previous);
+        if (!close_loaded_source()) return false;
+        set_loaded_name(filename);
+        if (!ensure_loaded_source_open()) {
+            set_loaded_name(previous);
+            if (s_loaded_from_sd) ensure_loaded_source_open();
+            return false;
+        }
+        vf = s_reindex_scratch;
+        s_loaded_identity = candidate_identity;
+        s_source_verified = true;
+        s_loaded_from_sd = true;
+        fallback_used = 0;
+        begin_loaded_file_generation();
+        return true;
+    }
+#endif
+    char candidate[VOCAB_FILE_BUFFER_LEN];
+    int used = 0;
+    if (!vocab_file_read_builtin_or_stub(filename, candidate, sizeof candidate, used) ||
+        used >= fallback_len || !fallback_buf) return false;
+#if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
     if (!close_loaded_source()) return false;
 #endif
-    // Every load attempt, including a same-name reload, starts a new source
-    // identity so no parsed card can leak across file generations.
-    begin_loaded_file_generation();
-#ifdef __DEVKITARM__
-    if (s_sd_ready && filename && has_txt_ext(filename)) {
-        if (recover_sd_sidecars(filename) && open_sd_streaming(filename, vf)) {
-            fallback_used = 0;
-            return true;
-        }
-    }
-#endif
+    std::memcpy(fallback_buf, candidate, used + 1);
+    fallback_used = used;
+    vocab_open(vf, fallback_buf, used);
     s_loaded_from_sd = false;
-    if (!vocab_file_read_builtin_or_stub(filename, fallback_buf, fallback_len, fallback_used)) {
-        return false;
-    }
     set_loaded_name(filename);
     ++s_io_stats.index_scans;
-    return vocab_open(vf, fallback_buf, fallback_used) > 0;
+    begin_loaded_file_generation();
+    return vf.loaded;
 }
 
-#ifdef __DEVKITARM__
+#if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
 static bool read_bounded_raw_line(FIL& fp, uint32_t offset,
                                   char* line, int line_cap, int& line_len)
 {
@@ -839,6 +969,9 @@ bool vocab_file_show(const VocabFile& vf, const char* fallback_buf, int fallback
         return false;
     }
 
+#if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
+    if (s_loaded_from_sd && !s_source_verified) return false;
+#endif
     uint32_t source_offset = vf.line_offsets[line_idx];
     if (s_card_cache_valid &&
         s_card_cache_loaded_generation == s_loaded_generation &&
@@ -853,7 +986,7 @@ bool vocab_file_show(const VocabFile& vf, const char* fallback_buf, int fallback
     ++s_io_stats.full_display_parses;
     LineBuf parsed;
     bool ok = false;
-#ifdef __DEVKITARM__
+#if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
     if (s_loaded_from_sd) {
         if (!ensure_loaded_source_open()) {
             invalidate_card_cache();
@@ -896,7 +1029,7 @@ bool vocab_file_show(const VocabFile& vf, const char* fallback_buf, int fallback
     return true;
 }
 
-#ifdef __DEVKITARM__
+#if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
 class FatFsBufferedWriter {
 public:
     explicit FatFsBufferedWriter(FIL& fp) : fp_(fp), used_(0), ok_(true) {}
@@ -932,8 +1065,9 @@ private:
     bool ok_;
 };
 
-static bool write_sd_grouped_temp(const VocabFile& vf, const char* tmp_name)
+static bool write_sd_grouped_temp(const VocabFile& vf, const char* tmp_name, bool& created)
 {
+    created = false;
     FIL in;
     if (tracked_open(&in, s_loaded_name, FA_READ | FA_OPEN_EXISTING) != FR_OK) return false;
 
@@ -943,6 +1077,7 @@ static bool write_sd_grouped_temp(const VocabFile& vf, const char* tmp_name)
         return false;
     }
 
+    created = true;
     char line[VOCAB_RAW_LINE_MAX];
     FatFsBufferedWriter writer(out);
     bool ok = true;
@@ -965,86 +1100,183 @@ static bool write_sd_grouped_temp(const VocabFile& vf, const char* tmp_name)
     return ok;
 }
 
+// Compare every expected ordered raw row and its box, using the retained source.
+static bool validate_replacement(const char* replacement, const char* source,
+                                  const VocabFile& expected, VocabFile& actual)
+{
+    if (!scan_sd_index(replacement, actual) || actual.rejected_rows ||
+        actual.line_count != expected.line_count) return false;
+    FIL old_file, new_file;
+    if (tracked_open(&old_file, source, FA_READ) != FR_OK) return false;
+    if (tracked_open(&new_file, replacement, FA_READ) != FR_OK) {
+        tracked_close(&old_file); return false;
+    }
+    bool ok = true;
+    int rank = 0;
+    char old_row[VOCAB_RAW_LINE_MAX], new_row[VOCAB_RAW_LINE_MAX];
+    for (int box = 1; box <= 5 && ok; ++box) {
+        for (int i = 0; i < expected.line_count && ok; ++i) {
+            if (expected.field[i] != box) continue;
+            int old_len = 0, new_len = 0;
+            ok = actual.field[rank] == box &&
+                read_bounded_raw_line(old_file, expected.line_offsets[i], old_row, sizeof old_row, old_len) &&
+                read_bounded_raw_line(new_file, actual.line_offsets[rank], new_row, sizeof new_row, new_len) &&
+                old_len == new_len && std::memcmp(old_row, new_row, old_len) == 0;
+            ++rank;
+        }
+    }
+    if (tracked_close(&old_file) != FR_OK) ok = false;
+    if (tracked_close(&new_file) != FR_OK) ok = false;
+    return ok;
+}
+
 class FatFsReplacementOps {
 public:
-    FatFsReplacementOps(const char* original, const char* temporary, const char* backup) :
-        original_(original), temporary_(temporary), backup_(backup) {}
+    FatFsReplacementOps(const char* original, const char* temporary, const char* backup, const char* journal, const VocabFile& expected) :
+        original_(original), temporary_(temporary), backup_(backup), journal_(journal), expected_(expected) {}
+
+    bool safe() {
+        if (!blocked_ && !transaction_chains_safe(original_, temporary_, backup_, journal_)) blocked_ = true;
+        return !blocked_;
+    }
 
     bool rename_original_to_backup() {
-        return tracked_rename(original_, backup_) == FR_OK;
+        return safe() && tracked_rename(original_, backup_) == FR_OK;
     }
     bool rename_temporary_to_original() {
-        return tracked_rename(temporary_, original_) == FR_OK;
+        return safe() && tracked_rename(temporary_, original_) == FR_OK;
     }
     bool reindex_replacement() {
-        return scan_sd_index(original_, s_reindex_scratch);
+        return safe() && validate_replacement(original_, backup_, expected_, s_reindex_scratch);
     }
     bool park_failed_replacement() {
-        return tracked_rename(original_, temporary_) == FR_OK;
+        return safe() && tracked_rename(original_, temporary_) == FR_OK;
     }
     bool restore_backup() {
-        return tracked_rename(backup_, original_) == FR_OK;
+        return safe() && tracked_rename(backup_, original_) == FR_OK;
     }
     bool remove_backup() {
-        return tracked_unlink(backup_) == FR_OK;
+        return safe() && tracked_unlink(backup_) == FR_OK;
     }
 
 private:
     const char* original_;
     const char* temporary_;
     const char* backup_;
+    const char* journal_;
+    bool blocked_ = false;
+    const VocabFile& expected_;
 };
 
 static bool save_sd_grouped(VocabFile& vf)
 {
     char tmp_name[VOCAB_FILENAME_MAX];
     char bak_name[VOCAB_FILENAME_MAX];
-    if (!make_sidecar_name(s_loaded_name, ".tmp", tmp_name) ||
-        !make_sidecar_name(s_loaded_name, ".bak", bak_name)) return false;
+    char txn_name[VOCAB_FILENAME_MAX];
 
     if (!close_loaded_source()) return false;
     auto fail_and_reopen = []() {
-        ensure_loaded_source_open();
+        s_source_verified = matches_file(s_loaded_name, s_loaded_identity) == IdentityMatch::match;
+        invalidate_card_cache();
+        if (s_source_verified) ensure_loaded_source_open();
         return false;
     };
 
     if (!recover_sd_sidecars(s_loaded_name)) return fail_and_reopen();
-
-    // Recovery removes sidecars only after proving a structurally valid original.
-    if (path_exists(tmp_name) || path_exists(bak_name)) return fail_and_reopen();
-
-    if (!write_sd_grouped_temp(vf, tmp_name)) {
-        // The original is still present, so this known-incomplete temp is safe
-        // to remove. Failure to remove it is conservative and blocks retry.
-        tracked_unlink(tmp_name);
+    IdentityMatch loaded = matches_file(s_loaded_name, s_loaded_identity);
+    if (loaded != IdentityMatch::match) {
+        s_last_error = loaded == IdentityMatch::mismatch ? "SOURCE CHANGED - RELOAD" : "SD IDENTITY READ ERROR";
         return fail_and_reopen();
     }
 
-    FatFsReplacementOps replacement(s_loaded_name, tmp_name, bak_name);
-    if (!run_replacement_transaction(replacement)) {
+    // Never reclaim an unknown/torn initialization. Try another bounded slot;
+    // ordinary successful saves still leave no sidecars. Probe errors abort.
+    bool available = false;
+    for (int slot = 1; slot <= 9; ++slot) {
+        if (!make_sidecar_name(s_loaded_name, ".tmp", tmp_name, slot) ||
+            !make_sidecar_name(s_loaded_name, ".bak", bak_name, slot) ||
+            !make_sidecar_name(s_loaded_name, ".txn", txn_name, slot)) return fail_and_reopen();
+        Presence pt = probe_path(tmp_name), pb = probe_path(bak_name), pj = probe_path(txn_name);
+        if (pt == Presence::error || pb == Presence::error || pj == Presence::error) return fail_and_reopen();
+        if (pt == Presence::missing && pb == Presence::missing && pj == Presence::missing) { available = true; break; }
+    }
+    if (!available) { s_last_error = "RECOVERY SLOTS FULL"; return fail_and_reopen(); }
+    bool journal_created = false, created = false;
+    if (!write_journal(s_loaded_name, nullptr, txn_name, journal_created)) {
+        if (journal_created && transaction_chains_safe(s_loaded_name, tmp_name, bak_name, txn_name))
+            tracked_unlink(txn_name); // only this attempt's CREATE_NEW
+        return fail_and_reopen();
+    }
+    auto abandon_precommit = [&]() {
+        if (!transaction_chains_safe(s_loaded_name, tmp_name, bak_name, txn_name)) return fail_and_reopen();
+        // Explicit ownership, not helper failure or the existence of original.
+        // Keep reservation if deleting our payload fails, allowing restart retry.
+        if ((!created || tracked_unlink(tmp_name) == FR_OK)) tracked_unlink(txn_name);
+        return fail_and_reopen();
+    };
+    if (!write_sd_grouped_temp(vf, tmp_name, created)) return abandon_precommit();
+
+    FileIdentity source_before = s_loaded_identity, replacement_identity;
+    bool appended = false;
+    if (!validate_replacement(tmp_name, s_loaded_name, vf, s_reindex_scratch) ||
+        !identify_file(tmp_name, replacement_identity) ||
+        !write_journal(s_loaded_name, tmp_name, txn_name, appended) ||
+        matches_file(s_loaded_name, s_loaded_identity) != IdentityMatch::match) return abandon_precommit();
+    FatFsReplacementOps replacement(s_loaded_name, tmp_name, bak_name, txn_name, vf);
+    ReplacementOutcome outcome = run_replacement_transaction(replacement);
+    // Even a failed rename may have installed its destination entry. Do not
+    // roll back, unlink payload/journal, or mark a save clean through an alias.
+    if (!replacement.safe()) {
+        s_source_verified = false;
         invalidate_card_cache();
+        return false;
+    }
+    if (outcome != ReplacementOutcome::committed) {
+        // These files were created by this live attempt. Unlike startup recovery,
+        // ownership of even a corrupted parked replacement is known here.
+        if (matches_file(s_loaded_name, source_before) == IdentityMatch::match && probe_path(bak_name) == Presence::missing) {
+            if ((probe_path(tmp_name) == Presence::missing || (probe_path(tmp_name) == Presence::present && tracked_unlink(tmp_name) == FR_OK))) tracked_unlink(txn_name);
+        }
+        invalidate_card_cache();
+        if (outcome == ReplacementOutcome::recovery_required) {
+            s_last_error = "RECOVERY REQUIRED";
+            s_source_verified = false; // never reopen an unverified promotion with old offsets
+            return false;
+        }
         return fail_and_reopen();
     }
+
+    if (probe_path(bak_name) == Presence::missing) tracked_unlink(txn_name);
 
     // Reopening is part of the user-visible result, but the replacement has
     // already committed. Install the validated index first so a failed reopen
     // cannot leave retryable old offsets targeting the regrouped TXT.
     s_loaded_from_sd = true;
-    return finalize_committed_save(vf, s_reindex_scratch,
+    s_loaded_identity = replacement_identity;
+    s_source_verified = true;
+    bool reopened = finalize_committed_save(vf, s_reindex_scratch,
                                    []() { return ensure_loaded_source_open(); });
+    if (!reopened) s_last_error = "SAVED - REOPEN FAILED";
+    return reopened;
 }
 #endif
 
 bool vocab_file_save_grouped(VocabFile& vf, const char* fallback_buf, int fallback_used,
                              char* out_buf, int out_len, int& out_used)
 {
+    s_save_installed_index = false;
+    s_last_error = "SD I/O ERROR";
+    if (vf.rejected_rows) { s_last_error = "READ ONLY: skipped rows"; return false; }
     // Dirty bits cover field movement; array_generation covers reorder/shuffle.
     // A clean unchanged file is an immediate success with no I/O or reindex.
     if (!vocab_any_dirty(vf) && vf.array_generation == 0) {
         out_used = 0;
+#if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
+        if (s_loaded_from_sd) return s_source_verified && ensure_loaded_source_open();
+#endif
         return true;
     }
-#ifdef __DEVKITARM__
+#if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
     if (s_loaded_from_sd) {
         out_used = 0;
         return save_sd_grouped(vf);

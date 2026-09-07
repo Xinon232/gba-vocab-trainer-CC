@@ -52,9 +52,11 @@ const char* State::consume_load_request() {
 
 bool State::restore_current_line_index(const VocabFile& vf, int line_idx)
 {
-    if (line_idx < 0 || line_idx >= vf.line_count) {
-        return false;
-    }
+    clear_undo();
+    for (int i = 0; i < 5; ++i) last_line_by_field_[i] = -1;
+    text_page_ = 0;
+    text_page_count_ = 1;
+    if (line_idx < 0 || line_idx >= vf.line_count) return false;
     current_line_idx_ = line_idx;
     remember_current_line_for_field(vf);
     return true;
@@ -187,6 +189,7 @@ void State::shuffle_current_field(VocabFile& vf)
 
 void State::finish_feedback(VocabFile& vf)
 {
+    text_page_ = 0;
     current_line_idx_ = feedback_line_idx_;
     find_next_word_in_field(vf);
     if (feedback_toggle_alternation_) {
@@ -202,6 +205,16 @@ void State::finish_feedback(VocabFile& vf)
 
 bool State::update(VocabFile& vf, const InputState& in)
 {
+    if (scene_ != SCENE_TRAIN) { l_pending_ = false; l_chord_ = false; }
+    if (scene_ == 4) {
+        if (in.select_pressed) scene_ = SCENE_BROWSE;
+        else if (in.a_pressed || in.b_pressed) {
+            save_before_load_ = in.a_pressed;
+            load_request_pending_ = true;
+            scene_ = SCENE_BROWSE;
+        }
+        return true;
+    }
     if (scene_ == SCENE_FEEDBACK) {
         show_answer_ = true;
         if (feedback_frames_left_ > 0) {
@@ -226,10 +239,23 @@ bool State::update(VocabFile& vf, const InputState& in)
     } else if (scene_ == SCENE_TRAIN) {
         show_answer_ = in.r_held;
 
-        if (in.l_pressed) {
-            direction_mode_++;
-            if (direction_mode_ > 3) direction_mode_ = 1;
+        if (in.l_pressed) { l_pending_ = true; l_chord_ = false; }
+        if ((in.l_held || in.l_pressed) && (in.left_pressed || in.right_pressed)) {
+            l_chord_ = true;
+            if (in.right_pressed) text_page_ = (text_page_ + 1) % text_page_count_;
+            else text_page_ = (text_page_ + text_page_count_ - 1) % text_page_count_;
+            return true;
         }
+        if (l_pending_ && !in.l_held && !in.l_pressed) {
+            if (!l_chord_) {
+                direction_mode_++;
+                if (direction_mode_ > 3) direction_mode_ = 1;
+                text_page_ = 0;
+            }
+            l_pending_ = false;
+        }
+        if (in.left_pressed || in.right_pressed || in.a_pressed || in.b_pressed ||
+            in.up_pressed || in.down_pressed || in.select_pressed) text_page_ = 0;
 
         // D-pad L/R switches boxes. This is a "navigate away" action,
         // so it clears any pending undo.
@@ -244,6 +270,7 @@ bool State::update(VocabFile& vf, const InputState& in)
 
         if (in.down_pressed) {
             clear_undo();
+            l_pending_ = false; l_chord_ = false;
             scene_ = SCENE_SHUFFLE_CONFIRM;
             return true;
         }
@@ -334,9 +361,10 @@ bool State::update(VocabFile& vf, const InputState& in)
             scene_ = SCENE_TRAIN;
         }
         if (in.a_pressed) {
-            load_request_pending_ = true;
             load_request_index_ = browse_index_;
-            scene_ = SCENE_TRAIN;
+            save_before_load_ = false;
+            if (vocab_any_dirty(vf) || vf.array_generation) scene_ = 4;
+            else load_request_pending_ = true;
         }
         if (in.up_pressed && browse_index_ > 0) {
             browse_index_--;
@@ -356,6 +384,7 @@ bool State::update(VocabFile& vf, const InputState& in)
         }
     }
 
+    if (scene_ != SCENE_TRAIN) { l_pending_ = false; l_chord_ = false; }
     return true;
 }
 

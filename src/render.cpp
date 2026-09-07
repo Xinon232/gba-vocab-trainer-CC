@@ -15,6 +15,7 @@
 // Flash on B press: red   tint for ~150ms.
 
 #include "render.h"
+#include "text_layout.h"
 
 #include "bn_core.h"
 #include "bn_bg_palettes.h"
@@ -43,8 +44,6 @@ constexpr int Y_FOOTER    =  64;
 
 constexpr int SAVE_X = 116;
 constexpr int SAVE_Y = -72;
-constexpr int WRAP_MAX_CHARS = 27;
-constexpr int WRAP_MAX_LINES = 2;
 constexpr int WRAP_LINE_STEP = 12;
 
 constexpr int FLASH_FRAMES = 60;  // at least one second at 60fps
@@ -53,80 +52,6 @@ constexpr int FLASH_FRAMES = 60;  // at least one second at 60fps
 constexpr int BG_R = 31;
 constexpr int BG_G = 31;
 constexpr int BG_B = 31;
-
-struct WrappedText {
-    char lines[WRAP_MAX_LINES][VOCAB_LINE_MAX];
-    int count;
-};
-
-int str_len(const char* text)
-{
-    int len = 0;
-    while (text[len] != 0) {
-        ++len;
-    }
-    return len;
-}
-
-void copy_slice(char* dest, const char* src, int start, int end)
-{
-    while (start < end && src[start] == ' ') {
-        ++start;
-    }
-    while (end > start && src[end - 1] == ' ') {
-        --end;
-    }
-
-    int out = 0;
-    while (start < end && out < VOCAB_LINE_MAX - 1) {
-        dest[out++] = src[start++];
-    }
-    dest[out] = 0;
-}
-
-WrappedText wrap_text(const char* text)
-{
-    WrappedText wrapped{};
-    int len = str_len(text);
-    int pos = 0;
-
-    while (pos < len && wrapped.count < WRAP_MAX_LINES) {
-        while (pos < len && text[pos] == ' ') {
-            ++pos;
-        }
-        if (pos >= len) {
-            break;
-        }
-
-        int remaining_lines = WRAP_MAX_LINES - wrapped.count;
-        int remaining_chars = len - pos;
-        int take = remaining_chars;
-
-        if (remaining_lines > 1 && remaining_chars > WRAP_MAX_CHARS) {
-            int limit = pos + WRAP_MAX_CHARS;
-            int break_pos = -1;
-            for (int i = limit; i > pos; --i) {
-                if (text[i] == ' ') {
-                    break_pos = i;
-                    break;
-                }
-            }
-            if (break_pos <= pos) {
-                break_pos = limit;
-            }
-            take = break_pos - pos;
-        }
-
-        copy_slice(wrapped.lines[wrapped.count], text, pos, pos + take);
-        ++wrapped.count;
-        pos += take;
-    }
-
-    if (wrapped.count == 0) {
-        wrapped.lines[0][0] = 0;
-    }
-    return wrapped;
-}
 
 bool decode_utf8_codepoint(const char* text, int& index, unsigned& code)
 {
@@ -208,14 +133,22 @@ FlashcardFontKind flashcard_font_kind(const char* text)
 }
 
 void generate_wrapped_big(bn::sprite_text_generator& gen, int base_y, const char* text,
-                          bn::vector<bn::sprite_ptr, 256>& sprites)
+                          int page, bn::vector<bn::sprite_ptr, 256>& sprites)
 {
-    WrappedText wrapped = wrap_text(text);
-    int start_y = base_y - ((wrapped.count - 1) * WRAP_LINE_STEP) / 2;
-    for (int i = 0; i < wrapped.count; ++i) {
-        if (wrapped.lines[i][0] != 0) {
-            gen.generate(0, start_y + i * WRAP_LINE_STEP, wrapped.lines[i], sprites);
-        }
+    TextLayout layout = layout_text(text, 224, [&gen](const char* s) { return gen.width(s); });
+    if (!layout.valid) { gen.generate(0, base_y, "DISPLAY ERROR", sprites); return; }
+    int pages = text_pages(layout);
+    if (page >= pages) page = pages - 1;
+    int first = page * 2;
+    int count = layout.count - first;
+    if (count > 2) count = 2;
+    char line[VOCAB_LINE_MAX];
+    for (int i = 0; i < count; ++i) {
+        int span = first + i;
+        int length = layout.end[span] - layout.start[span];
+        std::memcpy(line, text + layout.start[span], length);
+        line[length] = 0;
+        gen.generate(0, base_y - ((count - 1) * WRAP_LINE_STEP) / 2 + i * WRAP_LINE_STEP, line, sprites);
     }
 }
 
@@ -277,6 +210,7 @@ void Renderer::reset() {
 }
 
 void Renderer::set_save_status(SaveStatus status) {
+    if (status == SaveStatus::IDLE || status == SaveStatus::SAVING) notice = nullptr;
     if (save_status != status) {
         save_status = status;
         last_save_status = status == SaveStatus::IDLE ? SaveStatus::FAILED : SaveStatus::IDLE;
@@ -288,6 +222,7 @@ void Renderer::update(const VocabFile& vf, int current_line_idx, int current_fie
                       State::Side active_side, bool alternate_mode, bool show_answer,
                       bool field_is_empty, bool feedback_active)
 {
+    notice = nullptr; // browser-operation notices end on returning to training
     // Background: white, or the existing feedback color. The normal timer is
     // unchanged; feedback_active extends it while A/B remains held.
     if (flash_timer_frames > 0 || feedback_active) {
@@ -346,6 +281,7 @@ void Renderer::update_browser(const State& state)
         generate_save_indicator(small_gen, text_sprites, save_status);
     }
 
+    if (notice) small_gen.generate(0, -30, notice, text_sprites);
     int top = state.browse_top();
     int selected = state.browse_index();
     if (selected < top) {
@@ -371,6 +307,24 @@ void Renderer::update_browser(const State& state)
     }
 }
 
+void Renderer::update_message(const char* text)
+{
+    reset();
+    bn::bg_palettes::set_transparent_color(bn::color(BG_R, BG_G, BG_B));
+    small_gen.generate(0, 0, text, text_sprites);
+    small_gen.generate(0, 28, "SELECT: choose file", text_sprites);
+}
+
+void Renderer::update_switch_confirm()
+{
+    text_sprites.clear();
+    bn::bg_palettes::set_transparent_color(bn::color(BG_R, BG_G, BG_B));
+    small_gen.generate(0, -40, "Unsaved progress", text_sprites);
+    small_gen.generate(0, -12, "A save", text_sprites);
+    small_gen.generate(0, 10, "B discard", text_sprites);
+    small_gen.generate(0, 32, "SELECT cancel", text_sprites);
+}
+
 void Renderer::update_shuffle_confirm(int current_field)
 {
     bn::bg_palettes::set_transparent_color(bn::color(BG_R, BG_G, BG_B));
@@ -380,6 +334,16 @@ void Renderer::update_shuffle_confirm(int current_field)
     bn::string<32> line = bn::format<32>("in box {}?", current_field);
     small_gen.generate(0, -14, line, text_sprites);
     small_gen.generate(0, 20, "A yes   B no", text_sprites);
+}
+
+bn::sprite_text_generator& Renderer::font_for(const char* text)
+{
+            FlashcardFontKind kind = flashcard_font_kind(text);
+            return (kind == FlashcardFontKind::ARABIC) ? multilang_gen :
+                                             ((kind == FlashcardFontKind::HANGUL) ? hangul_gen :
+                                             ((kind == FlashcardFontKind::CJK) ? cjk_gen :
+                                             ((kind == FlashcardFontKind::JAPANESE) ? japanese_gen :
+                                             ((kind == FlashcardFontKind::GREEK_CYRILLIC) ? greek_cyrillic_gen : latin_gen))));
 }
 
 void Renderer::render_full(const VocabFile& vf, int current_line_idx, int current_field,
@@ -410,6 +374,22 @@ void Renderer::render_full(const VocabFile& vf, int current_line_idx, int curren
         small_gen.generate(0, Y_HEADER, header, text_sprites);
     }
 
+    int pages = 1;
+    if (!field_is_empty) {
+        for (const char* side : {current.a, current.b}) {
+            auto& gen = font_for(side);
+            auto layout = layout_text(side, 224, [&gen](const char* s) { return gen.width(s); });
+            int count = text_pages(layout);
+            if (count > pages) pages = count;
+        }
+    }
+    measured_page_count = pages;
+    int page = text_page % pages;
+    if (pages > 1 && !vf.rejected_rows && save_status != SaveStatus::FAILED) {
+        auto hint = bn::format<40>("L+Left/Right  page {}/{}", page + 1, pages);
+        small_gen.generate(0, 44, hint, text_sprites);
+    }
+
     // Prompt: the active side of the current word. 16x16 — BIG.
     if (field_is_empty) {
         bn::string<8> empty_str = "EMPTY";
@@ -417,13 +397,8 @@ void Renderer::render_full(const VocabFile& vf, int current_line_idx, int curren
     } else {
         const char* prompt = (active_side == State::SIDE_A) ? current.a : current.b;
         if (prompt[0] != 0) {
-            FlashcardFontKind kind = flashcard_font_kind(prompt);
-            bn::sprite_text_generator& gen = (kind == FlashcardFontKind::ARABIC) ? multilang_gen :
-                                             ((kind == FlashcardFontKind::HANGUL) ? hangul_gen :
-                                             ((kind == FlashcardFontKind::CJK) ? cjk_gen :
-                                             ((kind == FlashcardFontKind::JAPANESE) ? japanese_gen :
-                                             ((kind == FlashcardFontKind::GREEK_CYRILLIC) ? greek_cyrillic_gen : latin_gen))));
-            generate_wrapped_big(gen, Y_PROMPT, prompt, text_sprites);
+            bn::sprite_text_generator& gen = font_for(prompt);
+            generate_wrapped_big(gen, Y_PROMPT, prompt, page, text_sprites);
         }
     }
 
@@ -431,13 +406,8 @@ void Renderer::render_full(const VocabFile& vf, int current_line_idx, int curren
     if (show_answer && !field_is_empty) {
         const char* answer = (active_side == State::SIDE_A) ? current.b : current.a;
         if (answer[0] != 0) {
-            FlashcardFontKind kind = flashcard_font_kind(answer);
-            bn::sprite_text_generator& gen = (kind == FlashcardFontKind::ARABIC) ? multilang_gen :
-                                             ((kind == FlashcardFontKind::HANGUL) ? hangul_gen :
-                                             ((kind == FlashcardFontKind::CJK) ? cjk_gen :
-                                             ((kind == FlashcardFontKind::JAPANESE) ? japanese_gen :
-                                             ((kind == FlashcardFontKind::GREEK_CYRILLIC) ? greek_cyrillic_gen : latin_gen))));
-            generate_wrapped_big(gen, Y_ANSWER, answer, text_sprites);
+            bn::sprite_text_generator& gen = font_for(answer);
+            generate_wrapped_big(gen, Y_ANSWER, answer, page, text_sprites);
         }
     }
 
@@ -445,6 +415,9 @@ void Renderer::render_full(const VocabFile& vf, int current_line_idx, int curren
     if (save_status != SaveStatus::IDLE) {
         generate_save_indicator(small_gen, text_sprites, save_status);
     }
+
+    if (save_status == SaveStatus::FAILED) small_gen.generate(0, 44, save_error, text_sprites);
+    else if (vf.rejected_rows) small_gen.generate(0, 44, "READ ONLY: skipped rows", text_sprites);
 
     static constexpr int FOOTER_X[5] = { -96, -48, 0, 48, 96 };
     for (int i = 0; i < 5; i++) {

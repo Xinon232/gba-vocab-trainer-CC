@@ -64,6 +64,7 @@ public:
         bool b_held = false;
         bool r_held = false;
         bool l_pressed = false;
+        bool l_held = false;
         bool start_pressed = false;
         bool select_pressed = false;
         bool left_pressed = false;
@@ -76,6 +77,11 @@ public:
 
     bool update(VocabFile& vf, const InputState& in);
 
+    int text_page() const { return text_page_; }
+    void set_text_page_count(int count) {
+        text_page_count_ = count > 0 ? count : 1;
+        text_page_ %= text_page_count_;
+    }
     int current_line_idx() const { return current_line_idx_; }
     int direction_mode() const { return direction_mode_; }
     int current_field() const { return current_field_; }
@@ -106,6 +112,8 @@ public:
 
     int browse_index() const { return browse_index_; }
     int browse_top() const { return browse_top_; }
+    bool switch_confirm_active() const { return scene_ == 4; }
+    bool save_before_load() const { return save_before_load_; }
     bool load_request_pending() const { return load_request_pending_; }
     const char* consume_load_request();
 
@@ -115,6 +123,10 @@ public:
     const char* filename(int i) const;
 
 private:
+    int text_page_ = 0;
+    int text_page_count_ = 1;
+    bool l_pending_ = false;
+    bool l_chord_ = false;
     int current_line_idx_;
     int direction_mode_;
     int current_field_;
@@ -126,6 +138,7 @@ private:
     int browse_top_;
     bool load_request_pending_;
     int load_request_index_;
+    bool save_before_load_ = false;
     int last_line_by_field_[5];
     uint32_t shuffle_seed_;
     int feedback_frames_left_;

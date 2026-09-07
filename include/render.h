@@ -26,11 +26,17 @@ public:
                 bool field_is_empty,       // current box has no words
                 bool feedback_active);     // held A/B keeps flash active
 
+    void set_text_page(int page) { if (text_page != page) { text_page = page; last_line_idx = -1; } }
+    int text_page_count() const { return measured_page_count; }
     void update_browser(const State& state);
     void update_shuffle_confirm(int current_field);
+    void update_switch_confirm();
+    void update_message(const char* text);
+    void set_notice(const char* text) { notice = text; }
 
     // Show save progress or a persistent failure indicator.
     void set_save_status(SaveStatus status);
+    void set_save_error(const char* error) { save_error = error; }
 
     // Trigger a flash. flash_green() = A press. flash_red() = B press.
     void flash_green();
@@ -50,6 +56,11 @@ private:
     bn::sprite_text_generator multilang_gen;
     bn::vector<bn::sprite_ptr, 256> text_sprites;
 
+    int text_page = 0;
+    int measured_page_count = 1;
+    bn::sprite_text_generator& font_for(const char* text);
+    const char* notice = nullptr;
+    const char* save_error = "SD I/O ERROR";
     int last_line_idx;
     int last_field;
     State::Side last_active_side;

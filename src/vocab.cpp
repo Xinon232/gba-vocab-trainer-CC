@@ -9,6 +9,7 @@
 // it will be libugba's open/read/seek.
 
 #include "vocab.h"
+#include "vocab_scanner.h"
 
 #include <cstdio>
 #include <cstring>
@@ -301,6 +302,13 @@ static bool raw_row_parts(const char* line, int line_len, RawRowParts& parts)
 {
     if (!line || line_len <= 0 || line_len > VOCAB_RAW_LINE_MAX - 1) return false;
 
+    while (line_len && (line[line_len - 1] == '\r' || line[line_len - 1] == '\n')) --line_len;
+    int tabs = 0;
+    for (int i = 0; i < line_len; ++i) {
+        if (!line[i] || line[i] == '\r' || line[i] == '\n') return false;
+        if (line[i] == '\t') ++tabs;
+    }
+    if (tabs != 1) return false;
     int start = 0;
     while (start < line_len && (line[start] == ' ' || line[start] == '\t')) ++start;
     if (start >= line_len) return false;
@@ -359,67 +367,14 @@ bool parse_line_into(const char* line, int line_len, LineBuf& out)
 
 int vocab_open(VocabFile& vf, const char* data, int data_len)
 {
-    vf.reset();
-
-    int i = 0;
-    int loaded = 0;
-    int current_field = 1;
-    bool had_valid_in_current_group = false;
-    bool pending_group_advance = false;
-
-    while (i < data_len) {
-        // Find end of line.
-        int line_end = i;
-        while (line_end < data_len && data[line_end] != '\n') {
-            line_end++;
+    struct MemorySource {
+        const char* data; int length; int pos = 0;
+        bool next(char& ch, uint32_t& offset) {
+            if (!data || pos >= length) return false;
+            offset = uint32_t(pos); ch = data[pos++]; return true;
         }
-
-        int line_len = line_end - i;
-        bool blank_line = true;
-        for (int j = i; j < line_end; j++) {
-            char ch = data[j];
-            if (ch != ' ' && ch != '\t' && ch != '\r' && ch != '\n') {
-                blank_line = false;
-                break;
-            }
-        }
-
-        if (blank_line) {
-            if (had_valid_in_current_group) {
-                pending_group_advance = true;
-            }
-        } else if (line_len > 0) {
-            // Indexing is structural only: no font mapping, UTF-8 display
-            // conversion, or Arabic shaping is performed here.
-            if (vocab_validate_raw_row(data + i, line_len)) {
-                if (loaded >= VOCAB_MAX_LINES) {
-                    // Cap reached. Stop loading. (Future: overflow msg.)
-                    break;
-                }
-                if (pending_group_advance) {
-                    if (current_field < 5) {
-                        current_field++;
-                    }
-                    pending_group_advance = false;
-                    had_valid_in_current_group = false;
-                }
-                vf.line_offsets[loaded] = (uint32_t)i;
-                vf.field[loaded] = (uint8_t)current_field;
-                vf.field_counts[current_field - 1]++;
-                had_valid_in_current_group = true;
-                loaded++;
-            }
-            // Empty/malformed lines: silently skipped (visual separators
-            // in dict.cc exports, intentionally not flashcard data).
-        }
-
-        // Advance past the \n.
-        i = line_end + 1;
-    }
-
-    vf.line_count = loaded;
-    vf.loaded = (loaded > 0);
-    return loaded;
+    } source{data, data_len};
+    return vocab_scan(source, vf);
 }
 
 // --------------------------------------------------------------------
@@ -444,6 +399,7 @@ bool vocab_show(VocabFile& vf, const char* data, int data_len,
         line_end++;
     }
     int line_len = line_end - (int)off;
+    if (line_len && data[line_end - 1] == '\r') --line_len;
 
     if (!parse_line_into(data + off, line_len, out)) {
         return false;
@@ -646,6 +602,7 @@ int format_line(char* out_buf, int out_buf_len, const LineBuf& in)
 int vocab_export_grouped(const VocabFile& vf, const char* data, int data_len,
                          char* out_buf, int out_buf_len)
 {
+    if (vf.rejected_rows) return -1;
     int written = 0;
     for (int field = 1; field <= 5; field++) {
         for (int i = 0; i < vf.line_count; i++) {

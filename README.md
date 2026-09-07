@@ -1,6 +1,6 @@
 # GBA Vocab Trainer
 
-Current source version: **v0.2.6**.
+Current source version: **v0.2.7**.
 
 A simple 5-box vocabulary trainer for the Game Boy Advance, built with Butano and targeted at SuperFW / Supercard SD-style setups.
 
@@ -27,7 +27,8 @@ Training screen:
 - D-pad Left / Right: switch between boxes 1-5
 - D-pad Up: undo the most recent A/B decision, if you stayed in the same box
 - D-pad Down: ask to shuffle only the current box
-- L: cycle direction mode: front-to-back, back-to-front, alternating
+- L: tap and release to cycle direction mode: front-to-back, back-to-front, alternating
+- Hold L + D-pad Left / Right: previous / next text page (without changing box or mode)
 - Start: save/export the current progress
 - Select: open the file browser
 
@@ -35,7 +36,7 @@ File browser:
 
 - D-pad Up / Down: move through files
 - D-pad Left / Right: jump by 5 files
-- A: load selected `.txt` file
+- A: load selected `.txt` file; unsaved progress prompts **A Save / B Discard / Select Cancel**. Failed save/load keeps the previous list.
 - B: return to training
 
 ## File format
@@ -48,7 +49,13 @@ Hund	dog
 дом	house
 ```
 
-The importer keeps 5-box progress when reopening files saved/exported by the trainer. Progress lives in the grouped sections of the TXT itself; the trainer does not require or create SRAM `.sav` persistence. Safe replacement may briefly use `.tmp` and `.bak` recovery names, which are removed after a successful validated save.
+The importer keeps all five box positions when reopening its own TXT files, including empty first and middle boxes. Exactly one empty physical line separates each pair of boxes (four separators total); vocabulary row bytes are retained and saved with CRLF endings. There are no metadata rows, extra columns, footers, or persistent `.sav` files.
+
+Rows must have exactly two nonempty tab-separated fields, with at most 191 content bytes per row. Invalid/overlong rows and entries beyond 10,000 make the loaded source **read-only**, with a visible warning, rather than allowing a save to drop unseen material. Long display text wraps at codepoint boundaries using the selected font's pixel measurements and is available on additional pages.
+
+Transient replacement files use `name.txt.gbv1.tmp`, `.gbv1.bak`, and `.gbv1.txn`. Successful saves validate every ordered raw row and box before retiring the backup. Generic same-stem `.tmp`/`.bak` files are never used. Names longer than 54 bytes can be browsed but cannot be saved with the current 64-byte transaction-path buffer; shorten the filename first. See [v0.2.7 I/O notes](docs/file-io-v0.2.7.md) for recovery behavior and verification limitations.
+
+**dict.cc compatibility:** a synthetic file emitted by the actual exporter was uploaded through dict.cc's file input and both Unicode/annotated pairs were read back from Maintain. Vocabulary interchange works, but dict.cc itself trims leading/trailing empty groups and collapses consecutive empty lines: do not expect empty-box learning-state gaps to survive a round trip through the website. The private user sample was not uploaded.
 
 If no SD-card vocabulary file is loaded yet, the built-in starter list shows one language-name sample for each main supported font group/language family, including English, French, German, Spanish, Portuguese, Italian, Dutch, Polish, Czech, Turkish, Greek, Russian, Ukrainian, Japanese, Chinese, and Korean.
 
@@ -66,7 +73,7 @@ Build:
 make LIBBUTANO=/path/to/butano/butano
 ```
 
-The ROM output is `vocab.gba`.
+The ROM output is `vocab.gba`. Run the host suite with `bash tests/run_host_tests.sh` (g++ and Python 3; no Butano dependency).
 
 ## Notes
 

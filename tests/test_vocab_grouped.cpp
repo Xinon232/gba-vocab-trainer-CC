@@ -33,8 +33,8 @@ static int test_grouped_import_blank_lines_map_to_fields()
     VocabFile vf;
     int loaded = vocab_open(vf, data, (int)strlen(data));
     if (loaded != 5) { printf("    FAIL: loaded %d expected 5\n", loaded); return 1; }
-    if (expect_counts(vf, 2, 1, 2, 0, 0)) return 1;
-    if (vf.field[0] != 1 || vf.field[1] != 1 || vf.field[2] != 2 || vf.field[3] != 3 || vf.field[4] != 3) {
+    if (expect_counts(vf, 2, 0, 1, 2, 0)) return 1;
+    if (vf.field[0] != 1 || vf.field[1] != 1 || vf.field[2] != 3 || vf.field[3] != 4 || vf.field[4] != 4) {
         printf("    FAIL: fields = %u,%u,%u,%u,%u\n", vf.field[0], vf.field[1], vf.field[2], vf.field[3], vf.field[4]);
         return 1;
     }

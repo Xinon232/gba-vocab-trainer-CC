@@ -46,13 +46,13 @@ static int test_modes()
     }
     if (state.active_side() != State::SIDE_A) return 1;
     in = State::InputState{};
-    in.l_pressed = true; state.update(vf, in);  // 3→1
+    in.l_pressed = true; state.update(vf, in); in = {}; state.update(vf, in);  // 3→1
     if (state.direction_mode() != 1 || state.active_side() != State::SIDE_A) return 1;
     in = State::InputState{};
-    in.l_pressed = true; state.update(vf, in);  // 1→2
+    in.l_pressed = true; state.update(vf, in); in = {}; state.update(vf, in);  // 1→2
     if (state.direction_mode() != 2 || state.active_side() != State::SIDE_B) return 1;
     in = State::InputState{};
-    in.l_pressed = true; state.update(vf, in);  // 2→3
+    in.l_pressed = true; state.update(vf, in); in = {}; state.update(vf, in);  // 2→3
     if (state.direction_mode() != 3 || state.active_side() != State::SIDE_A) return 1;  // phase 0
     in = State::InputState{};
     in.a_pressed = true; state.update(vf, in);  // feedback, no phase toggle yet
@@ -61,7 +61,7 @@ static int test_modes()
     finish_feedback(state, vf);                 // phase toggle after flash
     if (state.active_side() != State::SIDE_B) return 1;
     in = State::InputState{};
-    in.l_pressed = true; state.update(vf, in);  // 3→1
+    in.l_pressed = true; state.update(vf, in); in = {}; state.update(vf, in);  // 3→1
     if (state.direction_mode() != 1 || state.active_side() != State::SIDE_A) return 1;
     printf("    OK\n");
     return 0;
@@ -287,7 +287,7 @@ static int test_browse()
     if (state.browse_index() != 1) return 1;
     in = State::InputState{};
     in.a_pressed = true; state.update(vf, in);
-    if (state.scene() != 0) return 1;
+    if (state.scene() != 1) return 1; // browser remains viable until load succeeds
     if (!state.load_request_pending()) return 1;
     if (strcmp(state.consume_load_request(), "NL-DE-5000.txt") != 0) return 1;
     if (state.load_request_pending()) return 1;
