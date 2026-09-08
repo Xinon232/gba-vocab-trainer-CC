@@ -92,6 +92,11 @@ public:
     // Restore to a precomputed line index in the new grouped order.
     bool restore_current_line_index(const VocabFile& vf, int line_idx);
 
+    int entry_target(const VocabFile& vf) const {
+        return !feedback_active() && current_field_is_empty(vf) ? -1 : current_line_idx_;
+    }
+    void entry_committed(const VocabFile& vf, int line_idx);
+
     bool current_field_is_empty(const VocabFile& vf) const;
 
     Side active_side() const;

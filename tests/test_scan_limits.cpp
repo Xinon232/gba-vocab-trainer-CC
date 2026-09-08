@@ -11,7 +11,7 @@ int main(){
   assert(vocab_file_scan_buffered_for_tests(s.data(),s.size(),7,w,reads)==1);
   LineBuf row;assert(vocab_show(v,s.data(),s.size(),0,row));
  }
- for(std::string bad:{std::string("broken\n"),std::string("a\tb\textra\n"),std::string(192,'x')+"\n",std::string("a\t\n")}){
+ for(std::string bad:{std::string("broken\n"),std::string("a\t\textra\n"),std::string(192,'x')+"\n",std::string("a\t\n")}){
   std::string s="good\trow\n"+bad;VocabFile v;vocab_open(v,s.data(),s.size());vocab_advance(v,0);
   char out[256];assert(vocab_export_grouped(v,s.data(),s.size(),out,sizeof out)<0);
  }

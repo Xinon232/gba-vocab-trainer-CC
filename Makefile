@@ -19,7 +19,7 @@ BUILD       :=  build
 LIBBUTANO   ?=  /path/to/butano/butano
 PYTHON      :=  python3
 SOURCES     :=  src
-INCLUDES    :=  include
+INCLUDES    :=  include references/gbawriter/src references/gbawriter/src/fonts
 # butano treats INCLUDES as relative to CURDIR. Symlink the common
 # headers we need into our own include dir so butano finds them.
 DATA        :=
@@ -34,7 +34,7 @@ ROMCODE     :=  AVTB
 # Optional Supercard second-ROM-mirror transfers. Default 0 preserves the
 # release-safe path; use `make SC_FAST_ROM_MIRROR=1 ...` only for hardware tests.
 SC_FAST_ROM_MIRROR ?= 0
-USERFLAGS   :=  -DSC_FAST_ROM_MIRROR=$(SC_FAST_ROM_MIRROR)
+USERFLAGS   :=  -DSC_FAST_ROM_MIRROR=$(SC_FAST_ROM_MIRROR) -fstack-usage
 USERCXXFLAGS :=
 USERASFLAGS :=
 USERLDFLAGS :=

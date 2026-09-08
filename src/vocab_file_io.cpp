@@ -2,6 +2,7 @@
 
 #include "vocab_file_io.h"
 #include "vocab_scanner.h"
+#include "writer_core.h"
 
 #include <cstring>
 
@@ -708,7 +709,8 @@ static bool scan_sd_index(FIL& fp, VocabFile& vf, FileIdentity& identity)
     int loaded = scan_sequential_source(source, vf);
     identity = source.identity();
     bool size_ok = identity.size == f_size(&fp);
-    if (source.failed() || !size_ok || loaded <= 0) {
+    if (loaded == 0 && !vf.rejected_rows) vf.loaded = true;
+    if (source.failed() || !size_ok || loaded < 0 || (loaded == 0 && vf.rejected_rows)) {
         vf.reset();
         return false;
     }
@@ -1013,6 +1015,29 @@ static bool read_bounded_raw_line(FIL& fp, uint32_t offset,
 }
 #endif
 
+bool vocab_file_raw_row(const VocabFile& vf, const char* fallback, int used,
+                        int index, char out[VOCAB_RAW_LINE_MAX])
+{
+    out[0] = 0;
+    if (index < 0 || index >= vf.line_count) return false;
+    int length = 0;
+#if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
+    if (s_loaded_from_sd) {
+        return s_source_verified && ensure_loaded_source_open() &&
+            read_bounded_raw_line(*s_loaded_source, vf.line_offsets[index], out,
+                                  VOCAB_RAW_LINE_MAX, length) &&
+            vocab_validate_raw_row(out, length);
+    }
+#endif
+    uint32_t pos = vf.line_offsets[index];
+    while (pos < uint32_t(used) && fallback[pos] != '\r' && fallback[pos] != '\n') {
+        if (length == VOCAB_RAW_LINE_MAX - 1) return false;
+        out[length++] = fallback[pos++];
+    }
+    out[length] = 0;
+    return vocab_validate_raw_row(out, length);
+}
+
 bool vocab_file_show(const VocabFile& vf, const char* fallback_buf, int fallback_used,
                      int line_idx, LineBuf& out)
 {
@@ -1084,12 +1109,26 @@ bool vocab_file_show(const VocabFile& vf, const char* fallback_buf, int fallback
 #if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
 // A save-scoped source cache. Sector-aligned starts preserve FatFS bulk reads
 // even after backward/shuffled offsets. Never aliases scanner/output storage.
+// A mutation is a bounded overlay on the immutable source. The live index is
+// not changed until the existing validated replacement transaction commits.
+static const char* s_entry_row = nullptr;
+constexpr uint32_t ENTRY_ROW_OFFSET = UINT32_MAX;
+BN_DATA_EWRAM_BSS static VocabFile s_entry_plan;
+static bool s_entry_direct = false;
+static EntryMutation s_entry_operation = EntryMutation::add;
+static uint32_t s_entry_start = 0;
+
 class FatFsRawRowReader {
 public:
     explicit FatFsRawRowReader(FIL& fp) : fp_(fp) {}
     bool read(uint32_t offset, char* row, int& length)
     {
         length = 0;
+        if (offset == ENTRY_ROW_OFFSET && s_entry_row) {
+            length = int(std::strlen(s_entry_row));
+            std::memcpy(row, s_entry_row, length + 1);
+            return true;
+        }
         while (length < VOCAB_RAW_LINE_MAX) {
             if (!valid_ || offset < start_ || offset - start_ >= size_) {
                 if (offset >= f_size(&fp_)) {
@@ -1160,6 +1199,62 @@ private:
     bool ok_;
 };
 
+// Clean-list mutations splice the physical TXT so unrelated rows, separators,
+// mixed LF/CRLF and an unterminated final row survive byte-for-byte. Dirty box
+// movement still uses the established grouped-save serialization below.
+static bool write_entry_splice(FIL& in, FatFsBufferedWriter& writer)
+{
+    const bool add = s_entry_operation == EntryMutation::add;
+    const bool remove = s_entry_operation == EntryMutation::remove;
+    const char* newline = "\r\n";
+    int newline_length = 2;
+    if (add && f_size(&in)) {
+        char prefix[VOCAB_RAW_LINE_MAX + 2];UINT n = 0;
+        if (tracked_read(&in,prefix,sizeof(prefix),&n) != FR_OK) return false;
+        for (UINT i=0;i<n;++i) if(prefix[i]=='\n') {
+            if (!i || prefix[i-1]!='\r') {newline="\n";newline_length=1;}
+            break;
+        }
+        if (tracked_seek(&in,0) != FR_OK) return false;
+    }
+    FatFsSequentialSource source(in);
+    bool inserted = false, skipping = false, ended = false;
+    uint32_t end = s_entry_start, offset = 0;
+    char c;
+    auto insert = [&]() {
+        inserted = true;
+        return remove || (writer.append(s_entry_row,int(std::strlen(s_entry_row))) &&
+                          (!add || writer.append(newline,newline_length)));
+    };
+    while(source.next(c,offset)) {
+        if (!inserted && offset == s_entry_start) {
+            if (!insert()) return false;
+            skipping = !add;
+        }
+        if (skipping) {
+            if ((remove && c=='\n') || (!remove && (c=='\r'||c=='\n'))) {
+                skipping = false; ended = true;
+                end = offset + (remove ? 1 : 0);
+                if(remove)continue;
+            } else continue;
+        }
+        if (!writer.append(&c,1)) return false;
+    }
+    if (source.failed() || source.identity().size != f_size(&in)) return false;
+    if (!inserted && !insert()) return false; // add to an empty physical file
+    if (!add && !ended) end = f_size(&in);
+    const uint32_t delta = writer.position() - uint32_t(f_size(&in));
+    s_reindex_scratch = s_entry_plan;
+    for(int i=0;i<s_reindex_scratch.line_count;++i) {
+        uint32_t old = s_reindex_scratch.line_offsets[i];
+        s_reindex_scratch.line_offsets[i] = old == ENTRY_ROW_OFFSET ? s_entry_start :
+            old >= end ? old + delta : old;
+    }
+    s_reindex_scratch.loaded = true;
+    vocab_clear_dirty(s_reindex_scratch);
+    return true;
+}
+
 static bool write_sd_grouped_temp(const VocabFile& vf, const char* tmp_name, bool& created,
                                    FileIdentity& identity)
 {
@@ -1179,7 +1274,8 @@ static bool write_sd_grouped_temp(const VocabFile& vf, const char* tmp_name, boo
     FatFsRawRowReader reader(in);
     s_reindex_scratch.reset();
     bool ok = true;
-    for (int field = 1; field <= 5 && ok; ++field) {
+    if (s_entry_direct) ok = write_entry_splice(in,writer);
+    for (int field = 1; !s_entry_direct && field <= 5 && ok; ++field) {
         for (int i = 0; i < vf.line_count && ok; ++i) {
             if (vf.field[i] != field) continue;
             int line_len = 0;
@@ -1202,7 +1298,7 @@ static bool write_sd_grouped_temp(const VocabFile& vf, const char* tmp_name, boo
     if (tracked_close(&out) != FR_OK) ok = false;
     if (ok) {
         identity = writer.identity();
-        s_reindex_scratch.loaded = s_reindex_scratch.line_count > 0;
+        s_reindex_scratch.loaded = true;
     }
     return ok;
 }
@@ -1417,6 +1513,67 @@ bool vocab_file_save_grouped(VocabFile& vf, const char* fallback_buf, int fallba
     vf.array_generation = 0;
     begin_loaded_file_generation();
     return true;
+}
+
+bool vocab_file_mutate(VocabFile& vf, EntryMutation operation, int target,
+                       const char* raw_row, int& result_index)
+{
+    s_save_installed_index = false;
+    s_last_error = "SD I/O ERROR";
+    result_index = target;
+#if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
+    if (!s_loaded_from_sd) { s_last_error = "NO SD FILE - not saved"; return false; }
+    if (!vf.loaded || vf.rejected_rows) { s_last_error = "READ ONLY: skipped rows"; return false; }
+    if (operation != EntryMutation::add && (target < 0 || target >= vf.line_count)) {
+        s_last_error = "NO SELECTED ENTRY"; return false;
+    }
+    if (operation == EntryMutation::add && vf.line_count >= VOCAB_MAX_LINES) { s_last_error = "ENTRY LIMIT: 10000"; return false; }
+    if (operation != EntryMutation::remove &&
+        (!raw_row || !vocab_validate_raw_row(raw_row, int(std::strlen(raw_row))) ||
+         !writer::valid_utf8(raw_row,std::strlen(raw_row)))) {
+        s_last_error = "INVALID ENTRY / 191 bytes max"; return false;
+    }
+    s_entry_plan = vf;
+    int committed_index = 0;
+    if (operation == EntryMutation::add) {
+        for (int i = vf.line_count; i > 0; --i) {
+            s_entry_plan.line_offsets[i] = vf.line_offsets[i - 1];
+            s_entry_plan.field[i] = vf.field[i - 1];
+        }
+        s_entry_plan.line_offsets[0] = ENTRY_ROW_OFFSET;
+        s_entry_plan.field[0] = 1;
+        ++s_entry_plan.line_count;
+        ++s_entry_plan.field_counts[0];
+    } else {
+        if (operation == EntryMutation::edit) s_entry_plan.line_offsets[target] = ENTRY_ROW_OFFSET;
+        for (int i = 0; i < vf.line_count; ++i)
+            if (vf.field[i] < vf.field[target] || (vf.field[i] == vf.field[target] && i < target))
+                ++committed_index;
+    }
+    if (operation == EntryMutation::remove) {
+        --s_entry_plan.field_counts[vf.field[target] - 1];
+        --s_entry_plan.line_count;
+        for (int i = target; i < s_entry_plan.line_count; ++i) {
+            s_entry_plan.line_offsets[i] = vf.line_offsets[i + 1];
+            s_entry_plan.field[i] = vf.field[i + 1];
+        }
+        if (committed_index >= s_entry_plan.line_count) committed_index = s_entry_plan.line_count - 1;
+    }
+    s_entry_row = raw_row;
+    s_entry_direct = !vocab_any_dirty(vf) && vf.array_generation == 0;
+    s_entry_operation = operation;
+    s_entry_start = operation == EntryMutation::add ? 0 : vf.line_offsets[target];
+    struct OverlayScope {
+        ~OverlayScope() { s_entry_row = nullptr; s_entry_direct = false; }
+    } overlay_scope;
+    const bool saved = save_sd_grouped(s_entry_plan);
+    if (s_save_installed_index) { vf = s_entry_plan; result_index = committed_index; }
+    return saved;
+#else
+    (void)vf; (void)operation; (void)raw_row;
+    s_last_error = "NO SD FILE - not saved";
+    return false;
+#endif
 }
 
 bool vocab_file_export_grouped_stub(const VocabFile& vf, const char* source, int source_len,

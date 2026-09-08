@@ -29,8 +29,21 @@ Training screen:
 - D-pad Down: ask to shuffle only the current box
 - L: press to immediately cycle direction mode: front-to-back, back-to-front, alternating
 - Long cards stay on one screen: the complete prompt and revealed answer wrap and use smaller body text only when necessary. There is no paging or scrolling; Left / Right always switches boxes.
-- Start: save/export the current progress
-- Select: open the file browser
+- Start alone: save/export the current progress **on release**
+- Select alone: open the file browser **on release**
+- Start + Select: open **Entry editor** (both press orders; release tails are consumed)
+
+Entry editor:
+
+- Choose **Add entry**, **Edit entry**, or **Delete entry** with Up / Down and A; B returns.
+- Add/Edit use two drafts: **Word / front (1/2)**, then **Translation / back (2/2)**.
+- **Start+A** advances, then saves both fields atomically. **Start+B** returns to the previous field with drafts intact; from step 1 it cancels without changing the TXT.
+- Add inserts at the top of Box 1. Edit captures the displayed card when the menu opens and keeps its box, position within that box, and learning progress.
+- Delete shows both captured fields and **Are you sure?**, initially **No**. Select Yes and press A to delete. An empty TXT remains open and can receive new entries.
+- Typing uses GBAWriter's actual input engine, UTF-8 caret/deletion, visual wrapping and writing font—not an on-screen keyboard. Hold Up/Right/Down/Left for `abc`/`def`/`hij`/`klm`; B/A/R selects the first/second/third letter. Hold L for `nop`/`qrs`/`tuw`/`xyz`. Isolated A inserts space; B deletes; R cycles Shift/Caps. Start+directions moves the caret; Start+L/R moves by a page. Select provides Writer's punctuation/accent cycling; Start+Select toggles its status bar.
+- Existing additional columns remain byte-for-byte unchanged during Edit; only the first two fields appear in the drafts. [Reference, controls and persistence details](docs/entry-editor.md).
+- Fields have 189-byte draft buffers; the confirmed two-field row remains limited to **191 UTF-8 bytes including its tab**, and the list to **10,000 entries**. Empty/blank-only fields and newline/tab input are rejected with feedback. A failure retains drafts; a committed-but-failed reopen is reported without offering a duplicate retry.
+- Mutations use the existing validated TXT replacement/recovery transaction. Clean-list mutations preserve unrelated physical bytes (including LF/CRLF and unterminated EOF). Pending box movement/shuffle uses the existing grouped CRLF save format. No permanent `.sav` or sidecar is introduced. Without an SD-backed TXT, the editor is usable for drafting but reports **NO SD FILE - not saved** on confirmation.
 
 File browser:
 
@@ -49,9 +62,9 @@ Hund	dog
 дом	house
 ```
 
-The importer keeps all five box positions when reopening its own TXT files, including empty first and middle boxes. Exactly one empty physical line separates each pair of boxes (four separators total); vocabulary row bytes are retained and saved with CRLF endings. There are no metadata rows, extra columns, footers, or persistent `.sav` files.
+The importer keeps all five box positions when reopening its own TXT files, including empty first and middle boxes. Exactly one empty physical line separates each pair of boxes (four separators total); vocabulary row bytes are retained and saved with CRLF endings. The app adds no metadata rows, extra columns, footers, or persistent `.sav` files. Existing additional columns are preserved verbatim.
 
-Rows must have exactly two nonempty tab-separated fields, with at most 191 content bytes per row. Invalid/overlong rows and entries beyond 10,000 make the loaded source **read-only**, with a visible warning, rather than allowing a save to drop unseen material. Long display text wraps at codepoint boundaries using the selected font's pixel measurements. Both sides fit on one screen, with body-only size reduction when needed (down to half size for extreme entries). Short cards retain their original typography and positions. Both sides are measured together, so revealing the answer never resizes the prompt. TXT content is never shortened to fit the display.
+The first two tab-separated fields must be nonempty; existing additional columns are retained outside the editable fields. The entire raw row, including any additional columns, is limited to 191 content bytes. Invalid/overlong rows and entries beyond 10,000 make the loaded source **read-only**, with a visible warning, rather than allowing a save to drop unseen material. Long display text wraps at codepoint boundaries using the selected font's pixel measurements. Both sides fit on one screen, with body-only size reduction when needed (down to half size for extreme entries). Short cards retain their original typography and positions. Both sides are measured together, so revealing the answer never resizes the prompt. TXT content is never shortened to fit the display.
 
 Transient replacement files use `name.txt.gbv1.tmp`, `.gbv1.bak`, and `.gbv1.txn`. Successful saves compare every ordered raw row and box exactly once before installation, then verify the installed physical fingerprint and complete index before retiring the backup. Generic same-stem `.tmp`/`.bak` files are never used. Names longer than 54 bytes can be browsed but cannot be saved with the current 64-byte transaction-path buffer; shorten the filename first. See [v0.2.11 I/O notes](docs/file-io-v0.2.11.md) for the approved validation fault model and retained same-handle loading, [v0.2.10 I/O notes](docs/file-io-v0.2.10.md) for bounded windows, [v0.2.9 identity notes](docs/file-io-v0.2.9.md), and [recovery details](docs/file-io-v0.2.7.md).
 

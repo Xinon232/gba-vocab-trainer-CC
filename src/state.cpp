@@ -50,6 +50,17 @@ const char* State::consume_load_request() {
     return filename(load_request_index_);
 }
 
+void State::entry_committed(const VocabFile& vf, int line_idx)
+{
+    scene_ = 0;
+    show_answer_ = false;
+    feedback_frames_left_ = 0;
+    flash_request_ = FLASH_NONE;
+    current_line_idx_ = -1;
+    if (line_idx >= 0 && line_idx < vf.line_count) current_field_ = vf.field[line_idx];
+    restore_current_line_index(vf,line_idx);
+}
+
 bool State::restore_current_line_index(const VocabFile& vf, int line_idx)
 {
     clear_undo();

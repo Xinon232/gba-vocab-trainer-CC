@@ -28,6 +28,15 @@ bool vocab_file_load(const char* filename, VocabFile& vf,
 bool vocab_file_show(const VocabFile& vf, const char* fallback_buf, int fallback_used,
                      int line_idx, LineBuf& out);
 
+bool vocab_file_raw_row(const VocabFile& vf, const char* fallback, int used,
+                        int index, char out[VOCAB_RAW_LINE_MAX]);
+
+enum class EntryMutation { add, edit, remove };
+// Atomic on-disk mutation. On precommit failure the live index is untouched.
+// result_index is in the committed grouped order; -1 denotes an empty list.
+bool vocab_file_mutate(VocabFile& vf, EntryMutation operation, int target,
+                       const char* raw_row, int& result_index);
+
 struct VocabIoStats {
     uint32_t file_opens;
     uint32_t seeks;

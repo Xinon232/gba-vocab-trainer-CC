@@ -308,9 +308,9 @@ static bool raw_row_parts(const char* line, int line_len, RawRowParts& parts)
         if (!line[i] || line[i] == '\r' || line[i] == '\n') return false;
         if (line[i] == '\t') ++tabs;
     }
-    if (tabs != 1) return false;
+    if (tabs < 1) return false;
     int start = 0;
-    while (start < line_len && (line[start] == ' ' || line[start] == '\t')) ++start;
+    while (start < line_len && line[start] == ' ') ++start;
     if (start >= line_len) return false;
 
     int tab_pos = -1;
@@ -328,8 +328,9 @@ static bool raw_row_parts(const char* line, int line_len, RawRowParts& parts)
         --a_end;
     }
     int b_start = tab_pos + 1;
-    while (b_start < line_len && (line[b_start] == ' ' || line[b_start] == '\t')) ++b_start;
-    int b_end = line_len;
+    while (b_start < line_len && line[b_start] == ' ') ++b_start;
+    int b_end = b_start;
+    while (b_end < line_len && line[b_end] != '\t') ++b_end;
     while (b_end > b_start && (line[b_end - 1] == '\r' || line[b_end - 1] == '\n' ||
                                 line[b_end - 1] == ' ')) {
         --b_end;

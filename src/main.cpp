@@ -11,6 +11,8 @@
 #include "render.h"
 #include "state.h"
 #include "vocab_file_io.h"
+#include "entry_shortcuts.h"
+#include "entry_screen.h"
 
 #include "common_variable_8x16_sprite_font.h"
 
@@ -114,13 +116,26 @@ int main()
     Renderer renderer;
     State state;
     int last_scene = state.scene();
+    EntryShortcuts shortcuts;
 
     while(true)
     {
         State::InputState in = read_input();
+        bool save_requested = false;
+        if ((state.scene() == 0 || state.feedback_active()) && g_vocab_file.loaded) {
+            auto action = shortcuts.update(bn::keypad::start_held(), bn::keypad::select_held());
+            in.start_pressed = false;
+            in.select_pressed = action == EntryShortcuts::Action::menu;
+            save_requested = action == EntryShortcuts::Action::save && state.scene() == 0;
+            if (action == EntryShortcuts::Action::editor) {
+                run_entry_screen(renderer, state, g_vocab_file, g_builtin_vocab, g_builtin_vocab_used);
+                shortcuts.suppress_until_release();
+                continue;
+            }
+        } else shortcuts.suppress_until_release();
         state.update(g_vocab_file, in);
 
-        if (in.start_pressed && state.scene() == 0) {
+        if (save_requested && state.scene() == 0) {
             int grouped_idx_after_save = -1;
             int idx_before_save = state.current_line_idx();
             if (vocab_file_loaded_from_sd() &&
