@@ -9,7 +9,7 @@ p = Path(sys.argv[1]); p.mkdir(exist_ok=True)
 root = Path(__file__).resolve().parents[1]
 fonts = [('common', 'variable_8x16_sprite_font', 'common_variable_8x16_sprite_font.h')]
 fonts += [('vocab_font', f'vocab_superfw_{k}_font_sprite_font', f'vocab_superfw_{k}_font_sprite_font.h') for k in ['latin_ext', 'greek_cyrillic', 'japanese', 'cjk', 'hangul']]
-fonts += [('', 'vocab_dejavu_arabic_font_sprite_font', 'vocab_dejavu_arabic_font_sprite_font.h')]
+
 font_data = []
 for ns, name, file in fonts:
     text = (root/'include'/file).read_text()

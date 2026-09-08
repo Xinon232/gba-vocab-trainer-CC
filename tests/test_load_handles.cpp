@@ -66,6 +66,6 @@ int main() {
  assert(!mutation&&vocab_any_dirty(v));
  fat_hook={};
  assert(vocab_file_save_grouped(v,fallback,used,output,sizeof output,written));
- fat_handle_hook={};assert(load("builtin.txt"));assert(load("a.txt"));
+ fat_handle_hook={};assert(load("b.txt"));assert(load("a.txt"));
  puts("PASS same FIL retained; failed candidate/old-close preserves live index, handle and cache; switches and cleanup retry");
 }

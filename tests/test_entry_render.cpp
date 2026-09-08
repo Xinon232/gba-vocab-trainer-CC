@@ -27,7 +27,7 @@ int main(int argc,char**argv){
  e.frame(1|32);e.frame(0);render_entry(e,pixels,ui,nullptr);
  int ink=0;for(auto px:pixels)ink+=px!=0;assert(ink>16);
  std::string maximum(189,'a');maximum+="\tZ";
- e.open(0,maximum.c_str());e.frame(0);e.frame(1);e.frame(0);e.frame(16);e.frame(0);
+ e.open(0,maximum.c_str());e.frame(0);e.frame(2);e.frame(0);e.frame(2);e.frame(0);e.frame(16);e.frame(0);
  labels.clear();render_entry(e,pixels,ui,nullptr);assert(has("Are you sure?"));
  ink=0;for(int y=18;y<94;++y)for(int x=0;x<240;++x)ink+=pixels[y*240+x]!=0;
  assert(ink>100); // The maximum valid entry must not become an empty preview.

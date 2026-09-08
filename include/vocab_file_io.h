@@ -3,13 +3,13 @@
 
 #include "vocab.h"
 
-constexpr int VOCAB_FILE_BUFFER_LEN = 2048;   // fallback/sample buffer only
+constexpr int VOCAB_FILE_BUFFER_LEN = 2048;   // legacy host regression scratch; no ROM fallback
 constexpr int VOCAB_EXPORT_BUFFER_LEN = 4096; // host/stub export scratch only
 constexpr int VOCAB_MAX_BROWSER_FILES = 32;
 constexpr int VOCAB_FILENAME_MAX = 64;
 
-// Mount/scan storage. On GBA this calls libfat and scans .txt files on SD.
-// On host it exposes deterministic sample files for tests.
+// Mount/scan FatFS storage. The ROM discovers TXT only under /gbavocab.
+// Legacy non-device regression tests may opt into deterministic fixtures.
 bool vocab_file_init();
 bool vocab_file_sd_ready();
 bool vocab_file_loaded_from_sd();
@@ -18,8 +18,8 @@ int vocab_file_count();
 const char* vocab_file_name(int index);
 
 // Load selected file. If SD is mounted on GBA, this streams the file once and
-// fills vf.line_offsets/field[] without copying the file into RAM. If SD is not
-// mounted or this is a host build, it falls back to small built-in samples.
+// fills vf.line_offsets/field[] without copying the file into RAM. Missing SD
+// or files fail without changing the active list; the ROM has no sample fallback.
 bool vocab_file_load(const char* filename, VocabFile& vf,
                      char* fallback_buf, int fallback_len, int& fallback_used);
 
@@ -32,7 +32,14 @@ bool vocab_file_raw_row(const VocabFile& vf, const char* fallback, int used,
                         int index, char out[VOCAB_RAW_LINE_MAX]);
 
 enum class EntryMutation { add, edit, remove };
-// Atomic on-disk mutation. On precommit failure the live index is untouched.
+// RAM-only confirmed mutation: bounded to 128 concurrently changed/added rows.
+// Deletions consume no row slots. Full capacity rejects without changing data.
+constexpr int VOCAB_PENDING_ROWS = 128;
+bool vocab_file_defer(VocabFile& vf, EntryMutation operation, int target,
+                      const char* raw_row, int& result_index);
+bool vocab_file_create(const char* filename, VocabFile& vf);
+bool vocab_file_next_unused_name(char out[VOCAB_FILENAME_MAX]);
+// Transactional on-disk mutation. On precommit failure the live index is untouched.
 // result_index is in the committed grouped order; -1 denotes an empty list.
 bool vocab_file_mutate(VocabFile& vf, EntryMutation operation, int target,
                        const char* raw_row, int& result_index);
@@ -101,7 +108,11 @@ int vocab_file_scan_buffered_for_tests(const char* data, int data_len, int chunk
 
 // Save/export current fields as dict.cc-style grouped TXT. On GBA+SD this full
 // rewrites to a temporary file, then replaces the original. On fallback/host it
-// writes grouped text into out_buf for testability.
+// writes grouped text into out_buf for testability. Normal SD saves read source
+// rows for construction, write the temporary, then scan the installed file once
+// against intended counts/boxes/offsets and the identity fused into writes.
+// No independent source-content or pre-install exact-row comparison: callers
+// must not externally modify the loaded TXT. Recovery/failure paths may reread.
 bool vocab_file_save_grouped(VocabFile& vf, const char* fallback_buf, int fallback_used,
                              char* out_buf, int out_len, int& out_used);
 

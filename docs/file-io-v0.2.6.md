@@ -1,5 +1,7 @@
 # v0.2.6 I/O and save reliability
 
+> Historical version notes, not the current V1.0 save guarantees. See [current simpler-save contract and limitations](file-io-simple-save.md).
+
 v0.2.6 is an incremental reliability release on the signed v0.2.5 baseline. The v0.2.3 buffered scanner, structural indexer, current-card cache, grouped transactional rewrite, recovery, and dirty-on-success behavior remain in place.
 
 ## Remaining changes

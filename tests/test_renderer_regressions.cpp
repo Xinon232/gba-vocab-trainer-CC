@@ -41,6 +41,19 @@ static void check(Renderer&r,VocabFile&v,const LineBuf&c){
 static void raw_check(Renderer&r,VocabFile&v,const std::string&raw){assert(raw.size()<=191);LineBuf c={};assert(parse_line_into(raw.data(),raw.size(),c));check(r,v,c);}
 int main(int argc,char**argv){
  VocabFile v;vocab_open(v,"a\tb\n",4);LineBuf c={};strcpy(c.a,"a");strcpy(c.b,"b");Renderer r;State s;
+ // Unsupported source codepoints must not select an alternate font or steal
+ // another script's font. Production callers pass parse_line_into output.
+ assert(&r.font_for("ب") == &r.font_for("a"));
+ assert(&r.font_for("بЖ") == &r.font_for("Ж"));
+ const std::string unsupported = "Aب ماء ﺐ ݐ ࢠ 𞸀Z\tдом";
+ const std::string original = unsupported;
+ LineBuf fallback = {};
+ assert(parse_line_into(unsupported.data(), unsupported.size(), fallback));
+ assert(std::string(fallback.a) == "A? ??? ? ? ? ?Z");
+ assert(std::string(fallback.b) == "дом");
+ assert(unsupported == original);
+ check(r,v,fallback);
+ r.reset();
  r.set_notice("SAVE FAILED - not switched");r.update_browser(s);assert(has(r,"SAVE FAILED - not switched"));
  r.reset();update(r,v,0,1,c,State::SIDE_A,true,false,false,false);
  for(auto&x:r.text_sprites)if(x.body){assert(x.py==-20);assert(x.width==32&&x.height==16);}
@@ -74,13 +87,13 @@ int main(int argc,char**argv){
  for(const std::string glyph:{"ä","Ж","日","𠀀","한","ب"}){
   for(int split=1;split<189;split+=3){std::string a,b;while(a.size()+glyph.size()<=size_t(split))a+=glyph;if(a.empty())a=glyph;while(a.size()+b.size()+glyph.size()+1<=191)b+=glyph;if(b.empty())b="W";raw_check(r,v,a+"\t"+b);}
  }
- // Word-boundary waste, asymmetric sides, fixed-width CJK, and Arabic forcing
- // its actual 14px ASCII W font; longest accepted bytes, not just long words.
+ // Word-boundary waste, asymmetric sides, fixed-width CJK, and unsupported
+ // source glyph fallback; longest accepted bytes, not just long words.
  for(const std::string prefix:{"","ب ","日 "})for(int word=1;word<=45;++word){
   std::string a=prefix;while(a.size()+word+1+3<=191)a+=std::string(word,'W')+" ";
   raw_check(r,v,a+"\tok");raw_check(r,v,"ok\t"+a);
  }
- // Deterministic mixed Arabic-font widths/spaces stress batching boundaries.
+ // Deterministic fallback plus mixed widths/spaces stress batching boundaries.
  unsigned rng=0x12345678;const char alphabet[]="WWMMii._ abcdefgh";
  for(int n=0;n<500;++n){std::string a="ب",b="ب";int split=3+n%183;
   while(a.size()<size_t(split)){rng=rng*1664525u+1013904223u;a+=alphabet[rng%(sizeof(alphabet)-1)];}

@@ -11,6 +11,7 @@ public:
     void frame(uint16_t held);
     void finish(bool committed, const char* error);
     Screen screen() const { return screen_; }
+    bool autosave() const { return autosave_; }
     bool active() const { return screen_ != Screen::closed; }
     int selection() const { return selection_; }
     int target() const { return target_; }
@@ -41,6 +42,7 @@ private:
     EntryMutation operation_ = EntryMutation::add;
     uint16_t previous_ = 0;
     bool wait_release_ = true, commit_ = false, status_visible_ = true;
+    bool autosave_ = false; // RAM-only, reset by construction every startup.
     bool provisional_ = false, provisional_dirty_ = false;
     std::size_t provisional_end_ = 0;
     int selection_ = 0, target_ = -1, viewport_ = 0;

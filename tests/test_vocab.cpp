@@ -1,6 +1,6 @@
 // test_vocab.cpp — host-side test harness for the streaming vocab layer
 // Build with: g++ -std=c++17 -Iinclude src/vocab.cpp tests/test_vocab.cpp -o test_vocab
-// Run: ./test_vocab data/sample.txt
+// Run: ./test_vocab tests/legacy_sample.txt
 
 #include "vocab.h"
 
@@ -10,7 +10,7 @@
 
 int main(int argc, char* argv[])
 {
-    const char* path = (argc > 1) ? argv[1] : "data/sample.txt";
+    const char* path = (argc > 1) ? argv[1] : "tests/legacy_sample.txt";
     std::ifstream f(path, std::ios::binary);
     if (!f) {
         fprintf(stderr, "Cannot open %s\n", path);

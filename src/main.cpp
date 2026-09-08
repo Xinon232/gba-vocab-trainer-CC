@@ -13,6 +13,7 @@
 #include "vocab_file_io.h"
 #include "entry_shortcuts.h"
 #include "entry_screen.h"
+#include "home_screen.h"
 
 #include "common_variable_8x16_sprite_font.h"
 
@@ -22,12 +23,6 @@ BN_DATA_EWRAM_BSS char g_builtin_vocab[VOCAB_FILE_BUFFER_LEN];
 BN_DATA_EWRAM_BSS char g_export_buffer[VOCAB_EXPORT_BUFFER_LEN];
 BN_DATA_EWRAM_BSS int g_builtin_vocab_used = 0;
 BN_DATA_EWRAM_BSS int g_export_buffer_used = 0;
-
-static void load_builtin_vocab()
-{
-    vocab_file_load("builtin.txt", g_vocab_file, g_builtin_vocab,
-                    VOCAB_FILE_BUFFER_LEN, g_builtin_vocab_used);
-}
 
 static bool load_selected_vocab(const char* filename)
 {
@@ -106,15 +101,37 @@ static void render_current_frame(Renderer& renderer, State& state)
     }
 }
 
+static bool home_save(void* context)
+{
+    auto& state = *static_cast<State*>(context);
+    int grouped_idx = grouped_save_index_for_line(g_vocab_file, state.current_line_idx());
+    bool saved = vocab_file_save_grouped(g_vocab_file, g_builtin_vocab, g_builtin_vocab_used,
+        g_export_buffer, VOCAB_EXPORT_BUFFER_LEN, g_export_buffer_used);
+    if (vocab_file_save_installed_index()) state.restore_current_line_index(g_vocab_file, grouped_idx);
+    return saved;
+}
+
+static void open_home(Renderer& renderer, State& state)
+{
+    HomeActions actions{&state, home_save,
+        [](void*, const char* filename) { return load_selected_vocab(filename); },
+        [](void*, const char* filename) { return vocab_file_create(filename, g_vocab_file); }};
+    if (run_home_screen(renderer, g_vocab_file, actions)) {
+        state = State(); // Only a successful load/create replaces navigation.
+        renderer.set_notice(nullptr);
+        renderer.set_save_status(SaveStatus::IDLE);
+    }
+}
+
 int main()
 {
     bn::core::init();
 
     vocab_file_init();
-    load_builtin_vocab();
 
     Renderer renderer;
     State state;
+    open_home(renderer, state);
     int last_scene = state.scene();
     EntryShortcuts shortcuts;
 
@@ -125,7 +142,13 @@ int main()
         if ((state.scene() == 0 || state.feedback_active()) && g_vocab_file.loaded) {
             auto action = shortcuts.update(bn::keypad::start_held(), bn::keypad::select_held());
             in.start_pressed = false;
-            in.select_pressed = action == EntryShortcuts::Action::menu;
+            in.select_pressed = false;
+            if (action == EntryShortcuts::Action::menu) {
+                open_home(renderer, state);
+                shortcuts.suppress_until_release();
+                last_scene = state.scene();
+                continue;
+            }
             save_requested = action == EntryShortcuts::Action::save && state.scene() == 0;
             if (action == EntryShortcuts::Action::editor) {
                 run_entry_screen(renderer, state, g_vocab_file, g_builtin_vocab, g_builtin_vocab_used);

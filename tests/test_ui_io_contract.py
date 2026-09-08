@@ -11,5 +11,5 @@ assert 'if (proceed && vocab_file_loaded_from_sd())' not in main, 'switch-save m
 # Positive checks: removing either remap must fail, too (not only old guards).
 import re
 remaps = re.findall(r'if\s*\(vocab_file_save_installed_index\(\)\)\s*\{?\s*state\.restore_current_line_index\(g_vocab_file,\s*(\w+)\);', main)
-assert sorted(remaps) == ['grouped_idx', 'grouped_idx_after_save'], 'both save paths must remap independently of bool result'
+assert sorted(remaps) == ['grouped_idx', 'grouped_idx', 'grouped_idx_after_save'], 'all three save paths must remap independently of bool result'
 print('PASS production UI wires prompt, reset and visible failure/warning states')

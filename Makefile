@@ -14,7 +14,7 @@
 #   - butano at /home/hlm/butano/butano
 #---------------------------------------------------------------------------------------------------------------------
 
-TARGET      :=  vocab
+TARGET      :=  gbavocab
 BUILD       :=  build
 LIBBUTANO   ?=  /path/to/butano/butano
 PYTHON      :=  python3

@@ -3,7 +3,7 @@
 import subprocess,re,sys
 from pathlib import Path
 root=Path(__file__).resolve().parents[1]
-elf=root/'vocab.elf'
+elf=root/'gbavocab.elf'
 nm=subprocess.check_output(['/opt/devkitpro/devkitARM/bin/arm-none-eabi-nm','-n','-S',str(elf)],text=True)
 symbols={}
 for line in nm.splitlines():

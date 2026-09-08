@@ -50,11 +50,13 @@ void run_entry_screen(Renderer& renderer,State& state,VocabFile& vf,const char* 
             editor.frame(keys());
             if(editor.commit_requested()) {
                 ui.sprites.clear();painter.fill(0);
-                ui_line(&ui,8,64,"SAVING - DO NOT POWER OFF");
+                ui_line(&ui,8,64,editor.autosave()?"SAVING - DO NOT POWER OFF":"APPLYING ENTRY");
                 painter.flip_page_later();bn::core::update();
                 int new_index=editor.target();
-                bool saved=vocab_file_mutate(vf,editor.operation(),editor.target(),editor.row(),new_index);
-                bool installed=vocab_file_save_installed_index();
+                bool saved=editor.autosave() ?
+                    vocab_file_mutate(vf,editor.operation(),editor.target(),editor.row(),new_index) :
+                    vocab_file_defer(vf,editor.operation(),editor.target(),editor.row(),new_index);
+                bool installed=editor.autosave()?vocab_file_save_installed_index():saved;
                 if(installed)state.entry_committed(vf,new_index);
                 editor.finish(installed,vocab_file_last_error());
                 if(installed&&!saved)renderer.set_notice(vocab_file_last_error());

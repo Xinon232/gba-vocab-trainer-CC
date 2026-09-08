@@ -62,14 +62,17 @@ void EntryEditor::frame(uint16_t held) {
         if ((pressed & bit(writer::Button::B)) || ((pressed & bit(writer::Button::A)) && !selection_)) {
             selection_ = 2; change(Screen::menu); return;
         }
-        if (pressed & (bit(writer::Button::UP) | bit(writer::Button::DOWN))) selection_ ^= 1;
+        if (pressed & (bit(writer::Button::LEFT) | bit(writer::Button::RIGHT))) selection_ ^= 1;
         if ((pressed & bit(writer::Button::A)) && selection_) commit_ = true;
         return;
     }
     if (screen_ == Screen::menu) {
         if (pressed & bit(writer::Button::B)) { change(Screen::closed); return; }
-        if (pressed & bit(writer::Button::UP)) selection_ = (selection_ + 2) % 3;
-        if (pressed & bit(writer::Button::DOWN)) selection_ = (selection_ + 1) % 3;
+        if (pressed & bit(writer::Button::UP)) selection_ = (selection_ + 3) % 4;
+        if (pressed & bit(writer::Button::DOWN)) selection_ = (selection_ + 1) % 4;
+        if ((pressed & bit(writer::Button::A)) && selection_ == 3) {
+            autosave_ = !autosave_; message_ = ""; return;
+        }
         if ((pressed & bit(writer::Button::A)) && selection_ == 2) {
             if (target_ < 0 || !captured_[0]) {message_ = "NO SELECTED ENTRY"; return;}
             operation_ = EntryMutation::remove;

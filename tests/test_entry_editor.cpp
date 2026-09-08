@@ -31,12 +31,12 @@ int main(){
  tap(e,B);tap(e,START|A);assert(e.commit_requested() && e.operation()==EntryMutation::edit);
  assert(!std::strcmp(e.row()," café \t Übersetzung"));
  e.finish(true,"");assert(!e.active());
- e.open(2,"erase\tlöschen");e.frame(0);tap(e,UP);tap(e,A);
+ e.open(2,"erase\tlöschen");e.frame(0);tap(e,bit(Button::DOWN));tap(e,bit(Button::DOWN));tap(e,A);
  assert(e.screen()==EntryEditor::Screen::confirm_delete && e.selection()==0);
  assert(!std::strcmp(e.captured(),"erase\tlöschen"));
  tap(e,A);assert(e.screen()==EntryEditor::Screen::menu && !e.commit_requested());
  tap(e,A);assert(e.screen()==EntryEditor::Screen::confirm_delete);
- tap(e,bit(Button::DOWN));tap(e,A);
+ tap(e,bit(Button::RIGHT));tap(e,A);
  assert(e.commit_requested() && e.operation()==EntryMutation::remove && e.target()==2);
  e.finish(false,"FAIL");e.frame(0);tap(e,B);
  assert(e.screen()==EntryEditor::Screen::menu && !e.commit_requested());

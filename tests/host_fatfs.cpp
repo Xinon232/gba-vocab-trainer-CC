@@ -55,7 +55,8 @@ FRESULT f_rename(const TCHAR* a,const TCHAR* b){auto r=hook("rename",b);if(r!=FR
  if(std::rename(path(a).c_str(),path(b).c_str()))return FR_DISK_ERR;
  if(crash_after_rename==b){crash_after_rename.clear();throw 1;}
  if(corrupt_on_rename==b){corrupt_on_rename.clear();FILE* f=fopen(path(b).c_str(),"wb");fputs("wrong\trow\r\n",f);fclose(f);}return hook("renamed",b);}
-FRESULT f_opendir(DIR* d,const TCHAR*){auto& v=dirs[d];v.clear();for(auto& e:std::filesystem::directory_iterator(fat_root))v.push_back(e.path().filename());return FR_OK;}
+FRESULT f_mkdir(const TCHAR* p){auto r=hook("mkdir",p);if(r!=FR_OK)return r;std::error_code e;if(std::filesystem::exists(path(p)))return FR_EXIST;return std::filesystem::create_directory(path(p),e)?FR_OK:FR_DISK_ERR;}
+FRESULT f_opendir(DIR* d,const TCHAR* p){auto& v=dirs[d];v.clear();if(!std::filesystem::is_directory(path(p)))return FR_NO_PATH;for(auto& e:std::filesystem::directory_iterator(path(p)))v.push_back(e.path().filename());return FR_OK;}
 FRESULT f_readdir(DIR* d,FILINFO* i){auto& v=dirs[d];memset(i,0,sizeof(*i));if(!v.empty()){strcpy(i->fname,v.back().c_str());v.pop_back();}return FR_OK;}
 FRESULT f_closedir(DIR* d){dirs.erase(d);return FR_OK;}
 }

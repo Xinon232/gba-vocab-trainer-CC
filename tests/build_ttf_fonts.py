@@ -5,7 +5,7 @@ from PIL import Image, ImageFont, ImageDraw
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def write_font(name, font_path, size, extras, cell_w=16, cell_h=16, y_adjust=0, tight_arabic=False):
+def write_font(name, font_path, size, extras, cell_w=16, cell_h=16, y_adjust=0):
     font = ImageFont.truetype(font_path, size)
     chars = [chr(c) for c in range(0x21, 0x7f)] + list(dict.fromkeys(extras))
     strip = Image.new('P', (cell_w, cell_h * len(chars)), 0)
@@ -37,9 +37,7 @@ def write_font(name, font_path, size, extras, cell_w=16, cell_h=16, y_adjust=0, 
             w = maxx - minx + 2
         else:
             w = space_adv
-        cp = ord(ch)
-        if tight_arabic and (0xFB50 <= cp <= 0xFEFF or 0x0600 <= cp <= 0x06FF):
-            w = max(2, w - 4)
+
         widths.append(max(2, min(cell_w, w)))
 
     (ROOT / 'graphics' / f'{name}.bmp').parent.mkdir(exist_ok=True)
@@ -91,6 +89,4 @@ constexpr bn::sprite_font {const}(
 
 
 cyr = ''.join(chr(c) for c in range(0x0400, 0x0500))
-arab = ''.join(chr(c) for c in range(0x0600, 0x0700)) + ''.join(chr(c) for c in range(0xFB50, 0xFF00))
-write_font('vocab_notosans_cyrillic_font', '/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf', 15, cyr, 16, 16, 0, False)
-write_font('vocab_dejavu_arabic_font', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 14, arab, 16, 16, 0, True)
+write_font('vocab_notosans_cyrillic_font', '/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf', 15, cyr, 16, 16, 0)

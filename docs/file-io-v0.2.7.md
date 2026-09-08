@@ -1,5 +1,7 @@
 # v0.2.7: TXT preservation and usable long cards
 
+> Historical version notes, not the current V1.0 save guarantees. See [current simpler-save contract and limitations](file-io-simple-save.md).
+
 ## TXT contract
 
 - Five positional boxes, separated by exactly four blank physical lines. Leading/consecutive separators represent empty boxes; the scanner never collapses them.

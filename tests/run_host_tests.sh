@@ -18,6 +18,8 @@ for name in test_entry_shortcuts test_entry_state test_vocab test_vocab_10k test
   "$BUILD/$name"
 done
 "$CXX" "${COMMON[@]}" -DVOCAB_HOST_FATFS src/vocab.cpp tests/host_fatfs.cpp tests/test_io_windows.cpp -o "$BUILD/io_windows"
+"$CXX" "${COMMON[@]}" -DVOCAB_HOST_FATFS src/vocab.cpp tests/host_fatfs.cpp tests/test_simple_save.cpp -o "$BUILD/simple_save"
+"$BUILD/simple_save"
 for mode in capacity generated maximum short-scanner short-identity installed-offset installed-box installed-count installed-row installed-tail; do
   "$BUILD/io_windows" "$mode"
 done
@@ -26,7 +28,7 @@ done
 "$CXX" "${COMMON[@]}" -DVOCAB_HOST_FATFS src/vocab.cpp src/vocab_file_io.cpp tests/host_fatfs.cpp tests/test_load_handles.cpp -o "$BUILD/load_handles"
 "$BUILD/load_handles"
 "$CXX" "${COMMON[@]}" -DVOCAB_HOST_FATFS src/vocab.cpp src/vocab_file_io.cpp src/state.cpp tests/host_fatfs.cpp tests/test_fatfs_faults.cpp -o "$BUILD/fatfs_faults"
-for mode in installed-no-original identity-boundaries load-truncated-stream output-tail-corruption alias-backup-crash alias-temp-crash alias-backup-error alias-temp-error alias-backup-temp recovery-open recovery-close stat-owned create-collision recovery-read recovery-stat cleanup-stat append edit precommit journal-short temp-short temp-crash rollback-park rollback-restore rename-restore reopen-ok reopen-fail; do
+for mode in transient-backed-probe transient-installed-probe installed-no-original identity-boundaries load-truncated-stream output-tail-corruption alias-backup-crash alias-temp-crash alias-backup-error alias-temp-error alias-backup-temp recovery-open recovery-close stat-owned create-collision recovery-read recovery-stat cleanup-stat append edit precommit journal-short temp-short temp-crash rollback-park rollback-restore rename-restore reopen-ok reopen-fail; do
   "$BUILD/fatfs_faults" "$mode"
 done
 "$CXX" "${COMMON[@]}" src/vocab.cpp src/vocab_file_io.cpp src/state.cpp tests/test_ui_regressions.cpp -o "$BUILD/ui_regressions"
@@ -54,4 +56,20 @@ python3 tests/test_entry_wiring.py
 python3 tests/test_no_sav_persistence.py
 python3 tests/test_ui_palette.py
 python3 tests/test_ui_io_contract.py
+for name in deferred; do
+  "$CXX" "${COMMON[@]}" -DVOCAB_HOST_FATFS src/vocab.cpp src/vocab_file_io.cpp tests/host_fatfs.cpp "tests/test_entry_$name.cpp" -o "$BUILD/entry_$name"
+  "$BUILD/entry_$name"
+done
+"$CXX" "${COMMON[@]}" src/writer_layout.cpp src/entry_editor.cpp src/vocab.cpp tests/test_entry_autosave.cpp -o "$BUILD/entry_autosave"
+"$BUILD/entry_autosave"
+"$CXX" "${COMMON[@]}" -DVOCAB_HOST_FATFS -DVOCAB_NO_DEMOS -DVOCAB_ROOT_DIRECTORY src/vocab.cpp src/vocab_file_io.cpp tests/host_fatfs.cpp tests/test_root_directory.cpp -o "$BUILD/root_directory"
+"$BUILD/root_directory"
+"$CXX" "${COMMON[@]}" -DVOCAB_HOST_FATFS src/vocab.cpp tests/host_fatfs.cpp tests/test_pending_unverified.cpp -o "$BUILD/pending_unverified"
+"$BUILD/pending_unverified"
+python3 tests/test_no_arabic_fonts.py
+gcc -std=c11 -Wall -Wextra -Wno-discarded-qualifiers -Wno-old-style-declaration -Ireferences/gbawriter/src -Ireferences/gbawriter/src/fonts tests/test_entry_font_coverage.c -o "$BUILD/entry_font_coverage"
+"$BUILD/entry_font_coverage"
+bash tests/run_home_tests.sh
+bash tests/run_select_accent_tests.sh
+python3 tests/test_select_accent_docs.py
 printf '\nPASS all host suites (production FatFS adapter included)\n'

@@ -8,7 +8,7 @@
 
 int main(int argc, char* argv[])
 {
-    const char* path = argc > 1 ? argv[1] : "data/sample.txt";
+    const char* path = argc > 1 ? argv[1] : "tests/legacy_sample.txt";
     std::ifstream input(path, std::ios::binary);
     if (!input) {
         std::fprintf(stderr, "Cannot open %s\n", path);

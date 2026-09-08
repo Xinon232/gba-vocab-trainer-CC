@@ -53,10 +53,10 @@ def render_strip_text(text, bmp_path, char_map, widths, scale=3):
     return img.convert('RGB')
 
 cmap_r, widths_r = parse_chars_and_widths(ROOT/'include/vocab_notosans_cyrillic_font_sprite_font.h', 'vocab_notosans_cyrillic_font')
-cmap_a, widths_a = parse_chars_and_widths(ROOT/'include/vocab_dejavu_arabic_font_sprite_font.h', 'vocab_dejavu_arabic_font')
+
 rows = [
     ('NOTO SANS RUSSIAN', render_strip_text('дом русский', ROOT/'graphics/vocab_notosans_cyrillic_font.bmp', cmap_r, widths_r, 4)),
-    ('DEJAVU ARABIC JOINED', render_strip_text('ﺐﺘﻛ  ﺀﺎﻣ  ﻲﺑﺮﻋ', ROOT/'graphics/vocab_dejavu_arabic_font.bmp', cmap_a, widths_a, 4)),
+
 ]
 out = Image.new('RGB', (760, 150), BG[:3])
 d = ImageDraw.Draw(out)
@@ -65,5 +65,5 @@ for label, im in rows:
     d.text((6, y + 18), label, fill=(0,0,0))
     out.paste(im, (185, y))
     y += 66
-out.save(ROOT/'noto_russian_arabic_preview.png')
-print(ROOT/'noto_russian_arabic_preview.png')
+out.save(ROOT/'noto_russian_preview.png')
+print(ROOT/'noto_russian_preview.png')

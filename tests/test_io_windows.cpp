@@ -100,26 +100,25 @@ int main(int argc, char** argv) {
         assert(s_reindex_scratch.line_offsets[i] == reference.line_offsets[i]);
         assert(s_reindex_scratch.field[i] == reference.field[i]);
     }
-    assert(validate_replacement("planned.tmp", "cards.txt", live, s_reindex_scratch, identity));
+    assert(validate_replacement("planned.tmp", live, s_reindex_scratch, identity));
     auto installed = [&](const FileIdentity& id) {
-        return validate_replacement("planned.tmp", nullptr, live, s_reindex_scratch, id,
-                                    ReplacementValidation::installed_fingerprint);
+        return validate_replacement("planned.tmp", live, s_reindex_scratch, id);
     };
     assert(installed(identity));
     // Generated offsets are not authority: a wrong planned offset must fail.
     ++s_reindex_scratch.line_offsets[0];
-    assert(!validate_replacement("planned.tmp", "cards.txt", live, s_reindex_scratch, identity));
+    assert(!validate_replacement("planned.tmp", live, s_reindex_scratch, identity));
     assert(!installed(identity));
     --s_reindex_scratch.line_offsets[0];
-    assert(validate_replacement("planned.tmp", "cards.txt", live, s_reindex_scratch, identity));
-    // Reseal physical identity around parseable same-size corruption to prove
-    // exact ordered source-row comparison is independent from hash/index checks.
+    assert(validate_replacement("planned.tmp", live, s_reindex_scratch, identity));
+    // Approved reduced guarantee: resealed same-size row corruption/reorder
+    // is not caught without independent exact source comparison.
     std::string changed(exported.data(), length);
     changed[reference.line_offsets[0]] = 'Q';
     std::ofstream(fat_root + "/planned.tmp", std::ios::binary) << changed;
     FileIdentity altered;
     assert(identify_file("planned.tmp", altered));
-    assert(!validate_replacement("planned.tmp", "cards.txt", live, s_reindex_scratch, altered));
+    assert(validate_replacement("planned.tmp", live, s_reindex_scratch, altered));
     assert(!installed(identity)); // Intended identity catches physical corruption.
     assert(installed(altered)); // Resealed noncryptographic identity is NOT exact proof.
     changed.assign(exported.data(), length);
@@ -128,7 +127,7 @@ int main(int argc, char** argv) {
     changed.replace(reference.line_offsets[1], 191, first);
     std::ofstream(fat_root + "/planned.tmp", std::ios::binary) << changed;
     assert(identify_file("planned.tmp", altered));
-    assert(!validate_replacement("planned.tmp", "cards.txt", live, s_reindex_scratch, altered));
+    assert(validate_replacement("planned.tmp", live, s_reindex_scratch, altered));
     assert(!installed(identity));
     assert(installed(altered));
     puts("PASS generated index checked against streamed persisted rows and offsets, shuffled max rows, empty boxes, resealed corruption");

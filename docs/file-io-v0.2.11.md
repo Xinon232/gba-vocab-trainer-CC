@@ -1,5 +1,7 @@
 # v0.2.11: approved validation passes and retained loading handle
 
+> Historical version notes, not the current V1.0 save guarantees. See [current simpler-save contract and limitations](file-io-simple-save.md).
+
 ## Scope and fault model
 
 This release changes only the approved load/save validation contract over v0.2.10. It does not change TXT grammar, rendering, input, learning-box grouping, transaction ownership, journal format, aliases, recovery, or committed-State outcomes.

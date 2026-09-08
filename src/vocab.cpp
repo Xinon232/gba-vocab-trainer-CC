@@ -64,12 +64,6 @@ static bool font_supports_codepoint(unsigned code)
     if (code >= 0x20000 && code <= 0x200CC) return true; // SuperFW CJK Ext-B subset
     if (code >= 0xAC00 && code <= 0xD7A3) return true;  // Korean Hangul syllables
 
-    // Existing experimental Arabic path. Do not expand/modify for v0.2.1.
-    if (code >= 0x0600 && code <= 0x06FF) return true;  // Arabic
-    if (code >= 0x0750 && code <= 0x077F) return true;  // Arabic Supplement
-    if (code >= 0x08A0 && code <= 0x08FF) return true;  // Arabic Extended-A
-    if (code >= 0xFB50 && code <= 0xFDFF) return true;  // Arabic Presentation Forms-A
-    if (code >= 0xFE70 && code <= 0xFEFF) return true;  // Arabic Presentation Forms-B
     return false;
 }
 
@@ -151,102 +145,6 @@ static bool decode_utf8(const char* src, int src_len, int& i, unsigned& code)
     return false;
 }
 
-struct ArabicForm {
-    unsigned base;
-    unsigned isolated;
-    unsigned final_form;
-    unsigned initial;
-    unsigned medial;
-};
-
-static constexpr ArabicForm ARABIC_FORMS[] = {
-    {0x0621, 0xFE80, 0,      0,      0     },
-    {0x0622, 0xFE81, 0xFE82, 0,      0     },
-    {0x0623, 0xFE83, 0xFE84, 0,      0     },
-    {0x0624, 0xFE85, 0xFE86, 0,      0     },
-    {0x0625, 0xFE87, 0xFE88, 0,      0     },
-    {0x0626, 0xFE89, 0xFE8A, 0xFE8B, 0xFE8C},
-    {0x0627, 0xFE8D, 0xFE8E, 0,      0     },
-    {0x0628, 0xFE8F, 0xFE90, 0xFE91, 0xFE92},
-    {0x0629, 0xFE93, 0xFE94, 0,      0     },
-    {0x062A, 0xFE95, 0xFE96, 0xFE97, 0xFE98},
-    {0x062B, 0xFE99, 0xFE9A, 0xFE9B, 0xFE9C},
-    {0x062C, 0xFE9D, 0xFE9E, 0xFE9F, 0xFEA0},
-    {0x062D, 0xFEA1, 0xFEA2, 0xFEA3, 0xFEA4},
-    {0x062E, 0xFEA5, 0xFEA6, 0xFEA7, 0xFEA8},
-    {0x062F, 0xFEA9, 0xFEAA, 0,      0     },
-    {0x0630, 0xFEAB, 0xFEAC, 0,      0     },
-    {0x0631, 0xFEAD, 0xFEAE, 0,      0     },
-    {0x0632, 0xFEAF, 0xFEB0, 0,      0     },
-    {0x0633, 0xFEB1, 0xFEB2, 0xFEB3, 0xFEB4},
-    {0x0634, 0xFEB5, 0xFEB6, 0xFEB7, 0xFEB8},
-    {0x0635, 0xFEB9, 0xFEBA, 0xFEBB, 0xFEBC},
-    {0x0636, 0xFEBD, 0xFEBE, 0xFEBF, 0xFEC0},
-    {0x0637, 0xFEC1, 0xFEC2, 0xFEC3, 0xFEC4},
-    {0x0638, 0xFEC5, 0xFEC6, 0xFEC7, 0xFEC8},
-    {0x0639, 0xFEC9, 0xFECA, 0xFECB, 0xFECC},
-    {0x063A, 0xFECD, 0xFECE, 0xFECF, 0xFED0},
-    {0x0641, 0xFED1, 0xFED2, 0xFED3, 0xFED4},
-    {0x0642, 0xFED5, 0xFED6, 0xFED7, 0xFED8},
-    {0x0643, 0xFED9, 0xFEDA, 0xFEDB, 0xFEDC},
-    {0x0644, 0xFEDD, 0xFEDE, 0xFEDF, 0xFEE0},
-    {0x0645, 0xFEE1, 0xFEE2, 0xFEE3, 0xFEE4},
-    {0x0646, 0xFEE5, 0xFEE6, 0xFEE7, 0xFEE8},
-    {0x0647, 0xFEE9, 0xFEEA, 0xFEEB, 0xFEEC},
-    {0x0648, 0xFEED, 0xFEEE, 0,      0     },
-    {0x0649, 0xFEEF, 0xFEF0, 0,      0     },
-    {0x064A, 0xFEF1, 0xFEF2, 0xFEF3, 0xFEF4},
-};
-
-static const ArabicForm* arabic_form(unsigned code)
-{
-    for (const ArabicForm& form : ARABIC_FORMS) {
-        if (form.base == code) return &form;
-    }
-    return nullptr;
-}
-
-static bool arabic_letter(unsigned code)
-{
-    return arabic_form(code) != nullptr;
-}
-
-static bool arabic_or_space(unsigned code)
-{
-    return code == ' ' || arabic_letter(code);
-}
-
-static bool joins_next(const ArabicForm* form)
-{
-    return form && form->initial != 0 && form->medial != 0;
-}
-
-static bool joins_prev(const ArabicForm* form)
-{
-    return form && form->final_form != 0;
-}
-
-static unsigned shaped_arabic(const unsigned* cps, int pos, int start, int end)
-{
-    const ArabicForm* cur = arabic_form(cps[pos]);
-    if (!cur) return cps[pos];
-
-    int prev = pos - 1;
-    while (prev >= start && cps[prev] == ' ') prev--;
-    int next = pos + 1;
-    while (next < end && cps[next] == ' ') next++;
-
-    const ArabicForm* prev_form = (prev >= start) ? arabic_form(cps[prev]) : nullptr;
-    const ArabicForm* next_form = (next < end) ? arabic_form(cps[next]) : nullptr;
-    bool connect_prev = joins_prev(cur) && joins_next(prev_form);
-    bool connect_next = joins_next(cur) && joins_prev(next_form);
-
-    if (connect_prev && connect_next && cur->medial) return cur->medial;
-    if (connect_prev && cur->final_form) return cur->final_form;
-    if (connect_next && cur->initial) return cur->initial;
-    return cur->isolated;
-}
-
 static bool copy_display_text(const char* src, int src_len, char* dst)
 {
     unsigned cps[VOCAB_LINE_MAX];
@@ -270,22 +168,7 @@ static bool copy_display_text(const char* src, int src_len, char* dst)
 
     int out_len = 0;
     for (int i = 0; i < cps_len; i++) {
-        if (arabic_letter(cps[i])) {
-            int start = i;
-            int end = i + 1;
-            while (end < cps_len && arabic_or_space(cps[end])) end++;
-            unsigned shaped[VOCAB_LINE_MAX];
-            for (int j = start; j < end; ++j) {
-                shaped[j - start] = shaped_arabic(cps, j, start, end);
-            }
-            // Butano draws left-to-right, so emit Arabic runs in visual order.
-            for (int j = end - start - 1; j >= 0; --j) {
-                if (!copy_supported_codepoint(dst, out_len, shaped[j])) return false;
-            }
-            i = end - 1;
-        } else {
-            if (!copy_supported_codepoint(dst, out_len, cps[i])) return false;
-        }
+        if (!copy_supported_codepoint(dst, out_len, cps[i])) return false;
     }
     dst[out_len] = 0;
     return true;

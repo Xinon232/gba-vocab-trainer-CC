@@ -54,7 +54,7 @@ private:
     bn::sprite_text_generator japanese_gen;
     bn::sprite_text_generator cjk_gen;
     bn::sprite_text_generator hangul_gen;
-    bn::sprite_text_generator multilang_gen;
+
     bn::vector<bn::sprite_ptr, 256> text_sprites;
 
     CardLayout body_layout;

@@ -21,9 +21,9 @@ void render_entry(EntryEditor& e,uint8_t* px,EntryUiLine ui,void* context) {
     ui(context,8,0,e.heading());
     using S=EntryEditor::Screen;
     if(e.screen()==S::menu) {
-        const char* normal[]={"  Add entry","  Edit entry","  Delete entry"};
-        const char* selected[]={"> Add entry","> Edit entry","> Delete entry"};
-        for(int i=0;i<3;++i)ui(context,24,36+i*24,e.selection()==i?selected[i]:normal[i]);
+        const char* normal[]={"  Add entry","  Edit entry","  Delete entry",e.autosave()?"  Autosave: ON":"  Autosave: OFF"};
+        const char* selected[]={"> Add entry","> Edit entry","> Delete entry",e.autosave()?"> Autosave: ON":"> Autosave: OFF"};
+        for(int i=0;i<4;++i)ui(context,24,30+i*24,e.selection()==i?selected[i]:normal[i]);
         ui(context,8,144,"Up/Down  A: Select  B: Back");
     } else if(e.screen()==S::confirm_delete) {
         // Both captured fields are shown in full. Only the confirmation
@@ -63,7 +63,7 @@ void render_entry(EntryEditor& e,uint8_t* px,EntryUiLine ui,void* context) {
         ui(context,8,96,"Are you sure?");
         ui(context,24,114,e.selection()==0?"> No":"  No");
         ui(context,104,114,e.selection()==1?"> Yes":"  Yes");
-        ui(context,8,144,"Up/Down  A: Confirm  B: Back");
+        ui(context,8,144,"Left/Right A: Confirm B: Back");
     } else if(e.screen()==S::front || e.screen()==S::back) {
         ui(context,8,18,e.screen()==S::front?"Word / front":"Translation / back");
         auto& text=e.text();auto& layout=e.layout();const char* s=text.data();
@@ -86,7 +86,7 @@ void render_entry(EntryEditor& e,uint8_t* px,EntryUiLine ui,void* context) {
             if(e.input().caps())line(px,184,128,"Caps",48);
             else if(e.input().shift_armed())line(px,184,128,"Shift",48);
         }
-        ui(context,8,144,e.screen()==S::front?"Start+A: Next   Start+B: Back":"Start+A: Save   Start+B: Back");
+        ui(context,8,144,e.screen()==S::front?"Start+A: Next   Start+B: Back":"Start+A: Apply  Start+B: Back");
     }
     if(e.message()[0])ui(context,8,128,e.message());
 }

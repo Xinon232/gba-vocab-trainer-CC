@@ -1,5 +1,7 @@
 # v0.2.10: bounded SD windows and combined readback validation
 
+> Historical version notes, not the current V1.0 save guarantees. See [current simpler-save contract and limitations](file-io-simple-save.md).
+
 ## Scoped changes
 
 - Scanner/identity reads, grouped output writes, and source-row reads each have an exclusive **4 KiB**, four-byte-aligned static EWRAM window. Random source cache refills begin on 512-byte sector boundaries, including backward/shuffled offsets. The source cache now also serves grouped writing; nearby rows can reuse already buffered bytes.

@@ -40,10 +40,10 @@ jobs:
           DEVKITARM: /opt/devkitpro/devkitARM
         run: make -j2 LIBBUTANO="$GITHUB_WORKSPACE/_butano/butano"
       - name: Verify ROM exists
-        run: test -s vocab.gba
+        run: test -s gbavocab.gba
       - name: Upload complete ROM
         uses: actions/upload-artifact@v4
         with:
-          name: gba-vocab-trainer-v0.2.11
-          path: vocab.gba
+          name: gbavocab-rom
+          path: gbavocab.gba
           if-no-files-found: error

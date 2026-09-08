@@ -26,14 +26,11 @@ superfw_cyr_chars, superfw_cyr_widths = parse_chars_and_widths(
     ROOT / 'include/vocab_superfw_cyrillic_font_sprite_font.h',
     'vocab_superfw_cyrillic_font_sprite_font_utf8_characters[]',
     'vocab_superfw_cyrillic_font_sprite_font_character_widths[]')
-dejavu_ar_chars, dejavu_ar_widths = parse_chars_and_widths(
-    ROOT / 'include/vocab_dejavu_arabic_font_sprite_font.h',
-    'vocab_dejavu_arabic_font_sprite_font_utf8_characters[]',
-    'vocab_dejavu_arabic_font_sprite_font_character_widths[]')
+
 
 latin_map = {c: i for i, c in enumerate(latin_chars)}
 superfw_cyr_map = {c: i for i, c in enumerate(superfw_cyr_chars)}
-dejavu_ar_map = {c: i for i, c in enumerate(dejavu_ar_chars)}
+
 
 def glyph_row(ch, char_map, widths, ascii_cell_width):
     cp = ord(ch)
@@ -75,7 +72,7 @@ def render_strip_text(text, bmp_path, char_map, widths=None, ascii_cell_width=8,
 rows = [
     ('OLD LATIN FONT', render_strip_text('Eichhörnchen ÄÖÜ äöü ß', ROOT/'graphics/vocab_latin_old_ext_font.bmp', latin_map, None, 8, 3)),
     ('SUPERFW RUSSIAN', render_strip_text('дом русский', ROOT/'graphics/vocab_superfw_cyrillic_font.bmp', superfw_cyr_map, superfw_cyr_widths, 8, 3)),
-    ('DEJAVU ARABIC JOINED', render_strip_text('ﺐﺘﻛ  ﺀﺎﻣ  ﻲﺑﺮﻋ', ROOT/'graphics/vocab_dejavu_arabic_font.bmp', dejavu_ar_map, dejavu_ar_widths, 7, 3)),
+
 ]
 W = 760
 H = sum(max(52, im.height + 16) for _, im in rows) + 10

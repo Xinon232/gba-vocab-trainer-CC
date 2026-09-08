@@ -36,7 +36,7 @@
 #include "vocab_superfw_japanese_font_sprite_font.h"
 #include "vocab_superfw_cjk_font_sprite_font.h"
 #include "vocab_superfw_hangul_font_sprite_font.h"
-#include "vocab_dejavu_arabic_font_sprite_font.h"
+
 #include "bn_sprite_items_field_underline.h"
 #include "bn_sprite_items_ui_variable_8x16_font.h"
 
@@ -109,8 +109,7 @@ enum class FlashcardFontKind {
     GREEK_CYRILLIC,
     JAPANESE,
     CJK,
-    HANGUL,
-    ARABIC
+    HANGUL
 };
 
 FlashcardFontKind flashcard_font_kind(const char* text)
@@ -123,10 +122,7 @@ FlashcardFontKind flashcard_font_kind(const char* text)
     while (text[i] != 0) {
         unsigned code = 0;
         decode_utf8_codepoint(text, i, code);
-        if ((code >= 0x0600 && code <= 0x06FF) ||
-            (code >= 0xFB50 && code <= 0xFEFF)) {
-            return FlashcardFontKind::ARABIC;
-        }
+
         if (code >= 0xAC00 && code <= 0xD7A3) {
             saw_hangul = true;
         }
@@ -220,7 +216,7 @@ Renderer::Renderer()
       japanese_gen(vocab_font::vocab_superfw_japanese_font_sprite_font),
       cjk_gen(vocab_font::vocab_superfw_cjk_font_sprite_font),
       hangul_gen(vocab_font::vocab_superfw_hangul_font_sprite_font),
-      multilang_gen(vocab_dejavu_arabic_font_sprite_font),
+
       last_line_idx(-1),
       last_field(0),
       last_active_side(State::SIDE_A),
@@ -240,7 +236,7 @@ Renderer::Renderer()
     japanese_gen.set_center_alignment();
     cjk_gen.set_center_alignment();
     hangul_gen.set_center_alignment();
-    multilang_gen.set_center_alignment();
+
 }
 Renderer::~Renderer() {
 }
@@ -391,11 +387,10 @@ void Renderer::update_shuffle_confirm(int current_field)
 bn::sprite_text_generator& Renderer::font_for(const char* text)
 {
             FlashcardFontKind kind = flashcard_font_kind(text);
-            return (kind == FlashcardFontKind::ARABIC) ? multilang_gen :
-                                             ((kind == FlashcardFontKind::HANGUL) ? hangul_gen :
+            return (kind == FlashcardFontKind::HANGUL) ? hangul_gen :
                                              ((kind == FlashcardFontKind::CJK) ? cjk_gen :
                                              ((kind == FlashcardFontKind::JAPANESE) ? japanese_gen :
-                                             ((kind == FlashcardFontKind::GREEK_CYRILLIC) ? greek_cyrillic_gen : latin_gen))));
+                                             ((kind == FlashcardFontKind::GREEK_CYRILLIC) ? greek_cyrillic_gen : latin_gen)));
 }
 
 void Renderer::render_full(const VocabFile& vf, int current_line_idx, int current_field,

@@ -25,6 +25,31 @@ int main(int argc,char** argv){
  auto load=[&](){return vocab_file_load("cards.txt",v,fallback,sizeof fallback,used);};
  auto save=[&](){return vocab_file_save_grouped(v,fallback,used,out,sizeof out,written);};
  assert(load());
+ if(mode=="transient-backed-probe"){
+  vocab_advance(v,0);bool backed=false,hit=false;
+  fat_hook=[&](auto op,auto p){
+   if(op=="renamed"&&p=="cards.txt.gbv1.bak")backed=true;
+   if(backed&&!hit&&op=="stat"&&p=="cards.txt.gbv1.tmp"){hit=true;return FR_DISK_ERR;}
+   return FR_OK;
+  };
+  assert(!save());assert(hit&&vocab_any_dirty(v));
+  LineBuf row;assert(vocab_file_show(v,fallback,used,0,row));assert(std::string(row.a)=="a");
+  assert(get("cards.txt")==original);fat_hook={};assert(save());assert(load());
+  puts("PASS transient pre-promotion probe restores original and live source before retry");return 0;
+ }
+ if(mode=="transient-installed-probe"){
+  vocab_advance(v,0);bool promoted=false,hit=false;
+  fat_hook=[&](auto op,auto p){
+   if(op=="renamed"&&p=="cards.txt")promoted=true;
+   if(promoted&&!hit&&op=="stat"&&p=="cards.txt.gbv1.bak"){hit=true;return FR_DISK_ERR;}
+   return FR_OK;
+  };
+  assert(save());assert(hit&&vocab_file_save_installed_index()&&!vocab_any_dirty(v));
+  LineBuf row;assert(vocab_file_show(v,fallback,used,0,row));assert(std::string(row.a)=="c");
+  fat_hook={};assert(save());assert(load());assert(v.line_count==2&&v.field[0]==1&&v.field[1]==2);
+  assert(!exists("cards.txt.gbv1.bak")&&!exists("cards.txt.gbv1.txn"));
+  puts("PASS transient installed probe reconciles validated index, source handle and retry");return 0;
+ }
  if(mode=="installed-no-original"){
   vocab_advance(v,0);bool promoted=false;
   fat_hook=[&](auto op,auto p){
@@ -173,9 +198,19 @@ int main(int argc,char** argv){
   fat_hook={};assert(load());assert(!exists("cards.txt.gbv1.txn"));
  }else if(mode=="append" || mode=="edit" || mode=="precommit"){
   const std::string changed=mode=="edit"?"x\tb\r\nc\td\r\n":original+"extra\tcard\r\n";
-  if(mode=="precommit")fat_hook=[&](auto op,auto p){if(op=="closed"&&p=="cards.txt.gbv1.txn")put("cards.txt",changed);return FR_OK;};
+  int journal_closes=0;
+  if(mode=="precommit")fat_hook=[&](auto op,auto p){if(op=="closed"&&p=="cards.txt.gbv1.txn"&&++journal_closes==2)put("cards.txt",changed);return FR_OK;};
   else put("cards.txt",changed);
-  assert(!save());assert(get("cards.txt")==changed);assert(vocab_any_dirty(v));assert(!exists("cards.txt.gbv1.bak"));
+  if(mode=="append") {
+   assert(!save());assert(get("cards.txt")==changed);assert(vocab_any_dirty(v));
+  } else {
+   // Approved reduced guarantee: no independent old-content rereads.
+   // Same-size external edits are consumed; a late external append is not
+   // indexed and can be overwritten. Source exclusivity is required.
+   assert(save());assert(!vocab_any_dirty(v));
+   assert(get("cards.txt")== (mode=="edit" ? "c\td\r\n\r\nx\tb\r\n\r\n\r\n\r\n" : "c\td\r\n\r\na\tb\r\n\r\n\r\n\r\n"));
+  }
+  assert(!exists("cards.txt.gbv1.bak"));
  }else if(mode=="journal-short" || mode=="temp-short"){
   std::string target=mode=="journal-short"?"cards.txt.gbv1.txn":"cards.txt.gbv1.tmp";
   fat_hook=[&](auto op,auto p){return op=="write"&&p==target?FR_DISK_ERR:FR_OK;};

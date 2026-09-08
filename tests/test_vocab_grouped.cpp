@@ -116,9 +116,9 @@ static int test_latin1_umlaut_is_preserved_for_gba_font()
     return 0;
 }
 
-static int test_utf8_russian_and_arabic_are_preserved()
+static int test_utf8_russian_preserved_and_unsupported_arabic_falls_back()
 {
-    printf("[5] UTF-8 Russian and Arabic display is preserved\n");
+    printf("[5] UTF-8 Russian preserved; unsupported Arabic uses question marks\n");
     const char data[] = "casa\tдом\r\nagua\tماء\r\nwrite\tكتب\r\n";
     VocabFile vf;
     int loaded = vocab_open(vf, data, (int)strlen(data));
@@ -128,12 +128,12 @@ static int test_utf8_russian_and_arabic_are_preserved()
         printf("    FAIL: Russian got '%s' / '%s'\n", lb.a, lb.b);
         return 1;
     }
-    if (!vocab_show(vf, data, (int)strlen(data), 1, lb) || strcmp(lb.b, "ﺀﺎﻣ") != 0) {
+    if (!vocab_show(vf, data, (int)strlen(data), 1, lb) || strcmp(lb.b, "???") != 0) {
         printf("    FAIL: Arabic got '%s' / '%s'\n", lb.a, lb.b);
         return 1;
     }
-    if (!vocab_show(vf, data, (int)strlen(data), 2, lb) || strcmp(lb.b, "ﺐﺘﻛ") != 0) {
-        printf("    FAIL: Arabic joining got '%s' / '%s'\n", lb.a, lb.b);
+    if (!vocab_show(vf, data, (int)strlen(data), 2, lb) || strcmp(lb.b, "???") != 0) {
+        printf("    FAIL: unsupported glyph fallback got '%s' / '%s'\n", lb.a, lb.b);
         return 1;
     }
     printf("    OK\n");
@@ -167,7 +167,7 @@ int main()
     rc |= test_long_realistic_line_parses();
     rc |= test_grouped_export_reopen_preserves_fields();
     rc |= test_latin1_umlaut_is_preserved_for_gba_font();
-    rc |= test_utf8_russian_and_arabic_are_preserved();
+    rc |= test_utf8_russian_preserved_and_unsupported_arabic_falls_back();
     rc |= test_multilingual_raw_bytes_survive_grouped_save();
     if (rc) { printf("\nFAIL\n"); return 1; }
     printf("\nPASS: grouped vocab import/export\n");

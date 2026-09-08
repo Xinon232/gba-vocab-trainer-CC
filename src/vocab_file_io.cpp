@@ -28,6 +28,17 @@ static uint32_t s_loaded_generation = 0;
 static VocabIoStats s_io_stats = {};
 static bool s_save_installed_index = false;
 static const char* s_last_error = "SD I/O ERROR";
+// Reserved virtual offsets cannot alias accepted physical source files.
+constexpr uint32_t PENDING_ROW_BASE = UINT32_MAX - VOCAB_PENDING_ROWS;
+#if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
+BN_DATA_EWRAM_BSS static char s_pending_rows[VOCAB_PENDING_ROWS][VOCAB_RAW_LINE_MAX];
+#else
+static char s_pending_rows[VOCAB_PENDING_ROWS][VOCAB_RAW_LINE_MAX];
+#endif
+static const char* pending_row(uint32_t offset) {
+    return offset >= PENDING_ROW_BASE && offset < UINT32_MAX ?
+        s_pending_rows[offset - PENDING_ROW_BASE] : nullptr;
+}
 bool vocab_file_save_installed_index() { return s_save_installed_index; }
 const char* vocab_file_last_error() { return s_last_error; }
 
@@ -254,8 +265,8 @@ static bool s_candidate_source_open = false;
 // on the small GBA stack and preserves the live dirty state if reindex fails.
 BN_DATA_EWRAM_BSS static VocabFile s_reindex_scratch;
 // Exclusive workspaces: scanner/identity, output writer, random source rows.
-// Save writing uses output + source; validation uses scanner + source. No
-// scanner, identity helper or writer is invoked while sharing a live window.
+// Save writing uses output + source; installed validation uses scanner only.
+// No scanner, identity helper or writer is invoked while sharing a live window.
 static constexpr UINT IO_WINDOW_BYTES = 4096;
 static constexpr uint32_t IO_SECTOR_BYTES = 512;
 static_assert(IO_WINDOW_BYTES % IO_SECTOR_BYTES == 0, "whole sector windows");
@@ -263,10 +274,22 @@ BN_DATA_EWRAM_BSS alignas(4) static char s_sequential_read_buffer[IO_WINDOW_BYTE
 BN_DATA_EWRAM_BSS alignas(4) static char s_save_write_buffer[IO_WINDOW_BYTES];
 BN_DATA_EWRAM_BSS alignas(4) static char s_source_row_buffer[IO_WINDOW_BYTES];
 
+// Public filenames are basenames; every production operation is rooted here.
+static const char* storage_path(const char* name, char (&out)[VOCAB_FILENAME_MAX + 10]) {
+#if defined(__DEVKITARM__) || defined(VOCAB_ROOT_DIRECTORY)
+    if (!name || std::strlen(name) >= VOCAB_FILENAME_MAX ||
+        std::strchr(name, '/') || std::strchr(name, '\\') || std::strchr(name, ':')) return nullptr;
+    std::strcpy(out, "/gbavocab/"); std::strcpy(out + 10, name); return out;
+#else
+    (void)out; return name;
+#endif
+}
 static FRESULT tracked_open(FIL* fp, const char* path, BYTE mode)
 {
     ++s_io_stats.file_opens;
-    return f_open(fp, path, mode);
+    char full[VOCAB_FILENAME_MAX + 10];
+    const char* resolved = storage_path(path, full);
+    return resolved ? f_open(fp, resolved, mode) : FR_INVALID_NAME;
 }
 
 static FRESULT tracked_close(FIL* fp)
@@ -327,13 +350,17 @@ static FRESULT tracked_sync(FIL* fp)
 static FRESULT tracked_rename(const char* from, const char* to)
 {
     ++s_io_stats.renames;
-    return f_rename(from, to);
+    char a[VOCAB_FILENAME_MAX + 10], b[VOCAB_FILENAME_MAX + 10];
+    const char* source = storage_path(from, a); const char* target = storage_path(to, b);
+    return source && target ? f_rename(source, target) : FR_INVALID_NAME;
 }
 
 static FRESULT tracked_unlink(const char* path)
 {
     ++s_io_stats.unlinks;
-    return f_unlink(path);
+    char full[VOCAB_FILENAME_MAX + 10];
+    const char* resolved = storage_path(path, full);
+    return resolved ? f_unlink(resolved) : FR_INVALID_NAME;
 }
 #endif
 
@@ -404,81 +431,12 @@ static void add_name(const char* name)
     s_name_count++;
 }
 
-static void add_builtin_names()
-{
-    add_name("builtin.txt");
-    add_name("NL-DE-5000.txt");
-    add_name("ES-DE-vocab.txt");
-}
-
-static void ensure_names_for_tests_or_fallback()
-{
-    if (s_name_count == 0) {
-        add_builtin_names();
-    }
-}
-
-static bool copy_text(const char* text, char* out, int out_len, int& out_used)
-{
-    if (!text || !out || out_len <= 0) return false;
-    int len = 0;
-    while (text[len] && len < out_len - 1) {
-        out[len] = text[len];
-        len++;
-    }
-    out[len] = 0;
-    out_used = len;
-    return text[len] == 0;
-}
-
-bool vocab_file_read_builtin_or_stub(const char* filename, char* out, int out_len, int& out_used)
-{
-    static const char* builtin =
-        "English\tEnglish\n"
-        "français\tFrench\n"
-        "Deutsch\tGerman\n"
-        "español\tSpanish\n"
-        "português\tPortuguese\n"
-        "italiano\tItalian\n"
-        "svenska\tSwedish\n"
-        "dansk\tDanish\n"
-        "norsk\tNorwegian\n"
-        "suomi\tFinnish\n"
-        "íslenska\tIcelandic\n"
-        "føroyskt\tFaroese\n"
-        "Nederlands\tDutch\n"
-        "polski\tPolish\n"
-        "čeština\tCzech\n"
-        "Türkçe\tTurkish\n"
-        "Ελληνικά\tGreek\n"
-        "русский\tRussian\n"
-        "українська\tUkrainian\n"
-        "日本語\tJapanese\n"
-        "中文\tChinese\n"
-        "한국어\tKorean\n";
-
-    static const char* nl_de =
-        "hond\tHund\r\n"
-        "kat\tKatze\r\n"
-        "\r\n"
-        "boom\tBaum\r\n"
-        "huis\tHaus\r\n"
-        "\r\n"
-        "boek\tBuch\r\n";
-
-    static const char* es_de =
-        "perro\tHund\r\n"
-        "gato\tKatze\r\n"
-        "agua\tWasser\r\n"
-        "\r\n"
-        "pan\tBrot\r\n"
-        "escuela\tSchule\r\n";
-
-    if (str_eq_local(filename, "builtin.txt")) return copy_text(builtin, out, out_len, out_used);
-    if (str_eq_local(filename, "NL-DE-5000.txt")) return copy_text(nl_de, out, out_len, out_used);
-    if (str_eq_local(filename, "ES-DE-vocab.txt")) return copy_text(es_de, out, out_len, out_used);
-    return false;
-}
+#if !defined(__DEVKITARM__) && !defined(VOCAB_NO_DEMOS)
+#include "../tests/legacy_builtin_fixture.h"
+#else
+static void ensure_names_for_tests_or_fallback() {}
+bool vocab_file_read_builtin_or_stub(const char*, char*, int, int&) { return false; }
+#endif
 
 static void set_loaded_name(const char* filename)
 {
@@ -496,7 +454,11 @@ static void scan_sd_root()
 {
     DIR dir;
     FILINFO info;
+#if defined(__DEVKITARM__) || defined(VOCAB_ROOT_DIRECTORY)
+    if (f_opendir(&dir, "/gbavocab") != FR_OK) return;
+#else
     if (f_opendir(&dir, "/") != FR_OK) return;
+#endif
     while (true) {
         if (f_readdir(&dir, &info) != FR_OK) break;
         if (!info.fname[0]) break;
@@ -540,7 +502,7 @@ bool vocab_file_init()
     // SuperFW initializes the SuperCard hardware before mounting FatFS:
     // faster WAITCNT, map SDRAM, enable SD interface, then run sdcard_init.
     // Without this the hardware probe stalls for a few seconds and mount
-    // falls back to the ROM sample list.
+    // reports unavailable storage without a vocabulary fallback.
 #ifdef VOCAB_HOST_FATFS
     s_sd_ready = f_mount(&s_fatfs, "0:", 1) == FR_OK;
 #else
@@ -556,9 +518,7 @@ bool vocab_file_init()
 #else
     s_sd_ready = false;
 #endif
-    if (s_name_count == 0) {
-        add_builtin_names();
-    }
+    ensure_names_for_tests_or_fallback();
     return s_sd_ready;
 }
 
@@ -721,7 +681,9 @@ enum class Presence { missing, present, error };
 static Presence probe_path(const char* path)
 {
     FILINFO info;
-    FRESULT r = f_stat(path, &info);
+    char full[VOCAB_FILENAME_MAX + 10];
+    const char* resolved = storage_path(path, full);
+    FRESULT r = resolved ? f_stat(resolved, &info) : FR_INVALID_NAME;
     if (r == FR_OK) return Presence::present;
     if (r == FR_NO_FILE || r == FR_NO_PATH) return Presence::missing;
     return Presence::error;
@@ -938,7 +900,7 @@ bool vocab_file_load(const char* filename, VocabFile& vf,
                      char* fallback_buf, int fallback_len, int& fallback_used)
 {
 #if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
-    if (s_sd_ready && filename && has_txt_ext(filename) && !str_eq_local(filename, "builtin.txt")) {
+    if (s_sd_ready && filename && has_txt_ext(filename)) {
         // Retain the very FIL used to index/fingerprint, with no independent
         // opening reread. A failed-close spare stays quarantined until closed.
         if (!close_candidate_source() || !recover_sd_sidecars(filename)) return false;
@@ -946,7 +908,8 @@ bool vocab_file_load(const char* filename, VocabFile& vf,
             return false;
         s_candidate_source_open = true;
         FileIdentity candidate_identity;
-        if (!scan_sd_index(*s_candidate_source, s_reindex_scratch, candidate_identity) ||
+        if (f_size(s_candidate_source) >= PENDING_ROW_BASE ||
+            !scan_sd_index(*s_candidate_source, s_reindex_scratch, candidate_identity) ||
             !close_loaded_source()) {
             close_candidate_source();
             return false;
@@ -966,6 +929,10 @@ bool vocab_file_load(const char* filename, VocabFile& vf,
         return true;
     }
 #endif
+#if defined(__DEVKITARM__) || defined(VOCAB_NO_DEMOS)
+    (void)fallback_buf; (void)fallback_len; (void)fallback_used;
+    return false;
+#else
     char candidate[VOCAB_FILE_BUFFER_LEN];
     int used = 0;
     if (!vocab_file_read_builtin_or_stub(filename, candidate, sizeof candidate, used) ||
@@ -981,6 +948,7 @@ bool vocab_file_load(const char* filename, VocabFile& vf,
     ++s_io_stats.index_scans;
     begin_loaded_file_generation();
     return vf.loaded;
+#endif
 }
 
 #if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
@@ -1020,6 +988,10 @@ bool vocab_file_raw_row(const VocabFile& vf, const char* fallback, int used,
 {
     out[0] = 0;
     if (index < 0 || index >= vf.line_count) return false;
+    if (const char* row = pending_row(vf.line_offsets[index])) {
+        std::strcpy(out, row);
+        return true;
+    }
     int length = 0;
 #if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
     if (s_loaded_from_sd) {
@@ -1047,7 +1019,7 @@ bool vocab_file_show(const VocabFile& vf, const char* fallback_buf, int fallback
     }
 
 #if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
-    if (s_loaded_from_sd && !s_source_verified) return false;
+    if (s_loaded_from_sd && !s_source_verified && !pending_row(vf.line_offsets[line_idx])) return false;
 #endif
     uint32_t source_offset = vf.line_offsets[line_idx];
     if (s_card_cache_valid &&
@@ -1063,6 +1035,9 @@ bool vocab_file_show(const VocabFile& vf, const char* fallback_buf, int fallback
     ++s_io_stats.full_display_parses;
     LineBuf parsed;
     bool ok = false;
+    if (const char* row = pending_row(source_offset)) {
+        ok = parse_line_into(row, int(std::strlen(row)), parsed);
+    } else
 #if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
     if (s_loaded_from_sd) {
         if (!ensure_loaded_source_open()) {
@@ -1124,6 +1099,11 @@ public:
     bool read(uint32_t offset, char* row, int& length)
     {
         length = 0;
+        if (const char* pending = pending_row(offset)) {
+            length = int(std::strlen(pending));
+            std::memcpy(row, pending, length + 1);
+            return true;
+        }
         if (offset == ENTRY_ROW_OFFSET && s_entry_row) {
             length = int(std::strlen(s_entry_row));
             std::memcpy(row, s_entry_row, length + 1);
@@ -1303,31 +1283,22 @@ static bool write_sd_grouped_temp(const VocabFile& vf, const char* tmp_name, boo
     return ok;
 }
 
-// Before installation compare exact ordered raw rows against the source once.
-// After installation authenticate physical bytes and the complete planned index
-// without reading original payload again (approved non-adversarial fault model).
-enum class ReplacementValidation { exact_source, installed_fingerprint };
-static bool validate_replacement(const char* replacement, const char* source,
+// One installed scan checks writer identity and intended counts/boxes/offsets.
+// This does not independently prove row equivalence to the old source.
+static bool validate_replacement(const char* replacement,
                                   const VocabFile& expected, const VocabFile& actual,
-                                  const FileIdentity& identity,
-                                  ReplacementValidation validation = ReplacementValidation::exact_source)
+                                  const FileIdentity& identity)
 {
-    const bool exact = validation == ReplacementValidation::exact_source;
     if (!actual.loaded || actual.rejected_rows || actual.line_count != expected.line_count ||
         !vocab_field_counts_valid(actual)) return false;
-    FIL old_file, new_file;
-    if (exact && tracked_open(&old_file, source, FA_READ) != FR_OK) return false;
-    if (tracked_open(&new_file, replacement, FA_READ) != FR_OK) {
-        if (exact) tracked_close(&old_file);
-        return false;
-    }
-    FatFsRawRowReader old_reader(old_file);
+    FIL new_file;
+    if (tracked_open(&new_file, replacement, FA_READ) != FR_OK) return false;
     FatFsSequentialSource readback(new_file);
     int expected_box = 1, expected_i = 0;
     uint32_t rejected = 0;
     ++s_io_stats.index_scans;
     int loaded = vocab_scan_visit(readback,
-        [&](int rank, uint32_t offset, int box, const char* row, int length) {
+        [&](int rank, uint32_t offset, int box, const char*, int) {
             // Match stable grouping of the live (possibly shuffled) source.
             while (expected_box <= 5) {
                 while (expected_i < expected.line_count && expected.field[expected_i] != expected_box)
@@ -1338,16 +1309,11 @@ static bool validate_replacement(const char* replacement, const char* source,
             }
             if (rank >= actual.line_count || expected_box > 5 || box != expected_box ||
                 actual.field[rank] != box || actual.line_offsets[rank] != offset) return false;
-            const uint32_t source_offset = expected.line_offsets[expected_i++];
-            if (!exact) return true;
-            char old_row[VOCAB_RAW_LINE_MAX];
-            int old_length = 0;
-            return old_reader.read(source_offset, old_row, old_length) &&
-                old_length == length && std::memcmp(old_row, row, length) == 0;
+            ++expected_i;
+            return true;
         }, rejected);
     bool ok = loaded == expected.line_count && !rejected && !readback.failed() &&
         readback.identity().size == f_size(&new_file) && same_identity(readback.identity(), identity);
-    if (exact && tracked_close(&old_file) != FR_OK) ok = false;
     if (tracked_close(&new_file) != FR_OK) ok = false;
     return ok;
 }
@@ -1369,8 +1335,7 @@ public:
         return safe() && tracked_rename(temporary_, original_) == FR_OK;
     }
     bool reindex_replacement() {
-        return safe() && validate_replacement(original_, nullptr, expected_, s_reindex_scratch, identity_,
-                                               ReplacementValidation::installed_fingerprint);
+        return safe() && validate_replacement(original_, expected_, s_reindex_scratch, identity_);
     }
     bool park_failed_replacement() {
         return safe() && tracked_rename(original_, temporary_) == FR_OK;
@@ -1406,10 +1371,27 @@ static bool save_sd_grouped(VocabFile& vf)
         return false;
     };
 
+    // Recovery can change the canonical file. Only that exceptional path (or
+    // a quarantined source) needs an identity reread before using old offsets.
+    bool recovering = !s_source_verified;
+    for (int slot = 1; slot <= 9; ++slot) {
+        char txn[VOCAB_FILENAME_MAX];
+        if (!make_sidecar_name(s_loaded_name, ".txn", txn, slot)) break;
+        Presence p = probe_path(txn);
+        if (p == Presence::error) return fail_and_reopen();
+        if (p == Presence::present) recovering = true;
+    }
     if (!recover_sd_sidecars(s_loaded_name)) return fail_and_reopen();
-    IdentityMatch loaded = matches_file(s_loaded_name, s_loaded_identity);
-    if (loaded != IdentityMatch::match) {
-        s_last_error = loaded == IdentityMatch::mismatch ? "SOURCE CHANGED - RELOAD" : "SD IDENTITY READ ERROR";
+    if (recovering && matches_file(s_loaded_name, s_loaded_identity) != IdentityMatch::match) {
+        s_last_error = "SOURCE CHANGED - RELOAD";
+        return fail_and_reopen();
+    }
+    // Cheap size check, not a claim of independent source-content validation.
+    FILINFO info;
+    char full[VOCAB_FILENAME_MAX + 10];
+    const char* path = storage_path(s_loaded_name, full);
+    if (!path || f_stat(path, &info) != FR_OK || info.fsize != s_loaded_identity.size) {
+        s_last_error = "SOURCE CHANGED - RELOAD";
         return fail_and_reopen();
     }
 
@@ -1441,14 +1423,42 @@ static bool save_sd_grouped(VocabFile& vf)
     FileIdentity source_before = s_loaded_identity, replacement_identity;
     if (!write_sd_grouped_temp(vf, tmp_name, created, replacement_identity)) return abandon_precommit();
     bool appended = false;
-    if (!validate_replacement(tmp_name, s_loaded_name, vf, s_reindex_scratch, replacement_identity) ||
-        !write_journal(s_loaded_name, &replacement_identity, txn_name, appended) ||
-        matches_file(s_loaded_name, s_loaded_identity) != IdentityMatch::match) return abandon_precommit();
+    // Output identity was accumulated from checked writes. No independent
+    // original passes or pre-install source-vs-temp comparison on normal saves.
+    if (!write_journal(s_loaded_name, &replacement_identity, txn_name, appended)) return abandon_precommit();
     FatFsReplacementOps replacement(s_loaded_name, tmp_name, bak_name, txn_name, vf, replacement_identity);
     ReplacementOutcome outcome = run_replacement_transaction(replacement);
-    // Even a failed rename may have installed its destination entry. Do not
-    // roll back, unlink payload/journal, or mark a save clean through an alias.
-    if (!replacement.safe()) {
+    // A transient metadata failure may follow a completed rename. Reconcile
+    // only on this failure path, before recovery can retire the backup and
+    // leave the old live offsets paired with the new canonical bytes.
+    bool safe = replacement.safe();
+    if (!safe || outcome != ReplacementOutcome::committed) {
+        outcome = ReplacementOutcome::recovery_required;
+        safe = transaction_chains_safe(s_loaded_name, tmp_name, bak_name, txn_name);
+        if (safe) {
+            if (probe_path(s_loaded_name) == Presence::missing &&
+                matches_file(bak_name, source_before) == IdentityMatch::match) {
+                tracked_rename(bak_name, s_loaded_name);
+                if (!transaction_chains_safe(s_loaded_name, tmp_name, bak_name, txn_name)) {
+                    s_source_verified = false;
+                    invalidate_card_cache();
+                    return false;
+                }
+            }
+            IdentityMatch original = matches_file(s_loaded_name, source_before);
+            if (original == IdentityMatch::match) {
+                outcome = ReplacementOutcome::restored;
+            } else if (original == IdentityMatch::mismatch &&
+                       validate_replacement(s_loaded_name, vf, s_reindex_scratch, replacement_identity)) {
+                outcome = ReplacementOutcome::committed;
+                // Ownership is from this live attempt; chain probes above
+                // exclude aliases. Failed cleanup retains the journal.
+                if (probe_path(bak_name) == Presence::present) tracked_unlink(bak_name);
+            }
+        }
+    }
+    // Never roll back, unlink or adopt through aliases or ambiguous probes.
+    if (!safe) {
         s_source_verified = false;
         invalidate_card_cache();
         return false;
@@ -1512,6 +1522,139 @@ bool vocab_file_save_grouped(VocabFile& vf, const char* fallback_buf, int fallba
     vocab_clear_dirty(vf);
     vf.array_generation = 0;
     begin_loaded_file_generation();
+    return true;
+}
+
+bool vocab_file_next_unused_name(char out[VOCAB_FILENAME_MAX])
+{
+    out[0] = 0;
+#if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
+    if (!s_sd_ready) { s_last_error = "NO SD CARD"; return false; }
+    for (int i = 1; i <= 999; ++i) {
+        char name[] = "LIST000.TXT";
+        name[4] = char('0' + i / 100);
+        name[5] = char('0' + (i / 10) % 10);
+        name[6] = char('0' + i % 10);
+        Presence found = probe_path(name);
+        if (found == Presence::error) { s_last_error = "SD I/O ERROR"; return false; }
+        if (found == Presence::missing) {
+            // An interrupted transaction may own a temporarily absent name.
+            // Never create over that recovery namespace.
+            bool reserved = false;
+            for (int slot = 1; slot <= 9; ++slot) {
+                char transaction[VOCAB_FILENAME_MAX];
+                make_sidecar_name(name, ".txn", transaction, slot);
+                Presence journal = probe_path(transaction);
+                if (journal == Presence::error) { s_last_error = "SD I/O ERROR"; return false; }
+                if (journal == Presence::present) reserved = true;
+            }
+            if (!reserved) { std::strcpy(out, name); return true; }
+        }
+    }
+    s_last_error = "NO UNUSED LIST NAME";
+#else
+    s_last_error = "NO SD CARD";
+#endif
+    return false;
+}
+
+bool vocab_file_create(const char* filename, VocabFile& vf)
+{
+    s_last_error = "CREATE FAILED";
+#if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
+    if (!s_sd_ready) { s_last_error = "NO SD CARD"; return false; }
+    if (!filename || !has_txt_ext(filename) || std::strchr(filename, '/') ||
+        std::strchr(filename, '\\') || std::strchr(filename, ':') ||
+        std::strlen(filename) > 54) { s_last_error = "INVALID FILENAME"; return false; }
+    for (int slot = 1; slot <= 9; ++slot) {
+        char transaction[VOCAB_FILENAME_MAX];
+        make_sidecar_name(filename, ".txn", transaction, slot);
+        if (probe_path(transaction) != Presence::missing) {
+            s_last_error = "RECOVERY NAME - not created"; return false;
+        }
+    }
+    if (!close_candidate_source()) return false;
+#if defined(__DEVKITARM__) || defined(VOCAB_ROOT_DIRECTORY)
+    FRESULT directory = f_mkdir("/gbavocab");
+    if (directory != FR_OK && directory != FR_EXIST) return false;
+#endif
+    // Never truncate an existing file. Reuse the quarantinable spare handle
+    // so a failed close cannot leave an untracked FatFS lock.
+    FRESULT opened = tracked_open(s_candidate_source, filename, FA_WRITE | FA_CREATE_NEW);
+    if (opened != FR_OK) {
+        if (opened == FR_EXIST) s_last_error = "FILE EXISTS";
+        return false;
+    }
+    s_candidate_source_open = true;
+    bool synced = tracked_sync(s_candidate_source) == FR_OK;
+    bool closed = close_candidate_source();
+    if (!synced || !closed) { s_last_error = "CREATE FAILED - check SD"; return false; }
+    char unused[1]; int used = 0;
+    if (!vocab_file_load(filename, vf, unused, sizeof unused, used)) {
+        s_last_error = "CREATED - load failed"; return false;
+    }
+    add_name(filename);
+    return true;
+#else
+    (void)filename; (void)vf;
+    s_last_error = "NO SD CARD";
+    return false;
+#endif
+}
+
+bool vocab_file_defer(VocabFile& vf, EntryMutation operation, int target,
+                      const char* raw_row, int& result_index)
+{
+    s_save_installed_index = false;
+    result_index = target;
+    if (!s_loaded_from_sd || !vf.loaded) { s_last_error = "NO SD FILE - not applied"; return false; }
+    if (vf.rejected_rows) { s_last_error = "READ ONLY: skipped rows"; return false; }
+    if (operation != EntryMutation::add && (target < 0 || target >= vf.line_count)) {
+        s_last_error = "NO SELECTED ENTRY"; return false;
+    }
+    if (operation == EntryMutation::add && vf.line_count >= VOCAB_MAX_LINES) {
+        s_last_error = "ENTRY LIMIT: 10000"; return false;
+    }
+    int slot = -1;
+    if (operation != EntryMutation::remove) {
+        if (!raw_row || !vocab_validate_raw_row(raw_row, int(std::strlen(raw_row))) ||
+            !writer::valid_utf8(raw_row, std::strlen(raw_row))) {
+            s_last_error = "INVALID ENTRY / 191 bytes max"; return false;
+        }
+        bool used[VOCAB_PENDING_ROWS] = {};
+        for (int i = 0; i < vf.line_count; ++i) {
+            if (i == target && operation == EntryMutation::edit) continue;
+            if (pending_row(vf.line_offsets[i])) used[vf.line_offsets[i] - PENDING_ROW_BASE] = true;
+        }
+        for (int i = 0; i < VOCAB_PENDING_ROWS; ++i) if (!used[i]) {slot = i; break;}
+        if (slot < 0) { s_last_error = "RAM FULL - save list first"; return false; }
+        std::strcpy(s_pending_rows[slot], raw_row);
+    }
+    if (operation == EntryMutation::add) {
+        for (int i = vf.line_count; i > 0; --i) {
+            vf.line_offsets[i] = vf.line_offsets[i - 1];
+            vf.field[i] = vf.field[i - 1];
+        }
+        vf.line_offsets[0] = PENDING_ROW_BASE + slot;
+        vf.field[0] = 1;
+        ++vf.line_count; ++vf.field_counts[0]; result_index = 0;
+    } else if (operation == EntryMutation::edit) {
+        vf.line_offsets[target] = PENDING_ROW_BASE + slot;
+    } else {
+        --vf.field_counts[vf.field[target] - 1]; --vf.line_count;
+        for (int i = target; i < vf.line_count; ++i) {
+            vf.line_offsets[i] = vf.line_offsets[i + 1];
+            vf.field[i] = vf.field[i + 1];
+        }
+        if (result_index >= vf.line_count) result_index = vf.line_count - 1;
+    }
+    // A structural change invalidates all row-index dirty bits and the card
+    // cache. Conservatively dirty the surviving rows; generation also covers
+    // deletion of the final row. No I/O takes place until a confirmed save.
+    std::memset(vf.dirty, 0xff, sizeof(vf.dirty));
+    if (++vf.array_generation == 0) ++vf.array_generation;
+    invalidate_card_cache();
+    s_last_error = "";
     return true;
 }
 

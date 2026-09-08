@@ -1,5 +1,7 @@
 # v0.2.3 file-I/O architecture
 
+> Historical version notes, not the current V1.0 save guarantees. See [current simpler-save contract and limitations](file-io-simple-save.md).
+
 > Historical note: the persistent-handle decision below describes v0.2.3. v0.2.6 retains one buffered source handle; see `file-io-v0.2.6.md`.
 
 ## Scope

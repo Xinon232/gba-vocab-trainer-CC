@@ -232,7 +232,7 @@ void write_bmp(const char* path, const uint8_t* pixels) {
 }
 
 int main(int argc, char* argv[]) {
-    const char* path = (argc > 1) ? argv[1] : "data/sample.txt";
+    const char* path = (argc > 1) ? argv[1] : "tests/legacy_sample.txt";
     FILE* f = fopen(path, "rb");
     if (!f) { fprintf(stderr, "Cannot open %s\n", path); return 1; }
     fseek(f, 0, SEEK_END);

@@ -1,5 +1,7 @@
 # v0.2.9: scoped buffered SD I/O
 
+> Historical version notes, not the current V1.0 save guarantees. See [current simpler-save contract and limitations](file-io-simple-save.md).
+
 ## Changes
 
 - Opening computes physical-file size and both existing checksums from the same buffered stream as the card index. An independent whole-file identity verification remains before installation: this is **not a single-pass open**. Scanner and identity reads reject premature EOF against the opened FatFS file size; read and close failures still abort.
