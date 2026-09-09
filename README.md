@@ -1,10 +1,10 @@
-# GBA Vocab Trainer
+# gbavocab
 
 Learn vocabulary with flashcards and create your own word lists on your Game Boy Advance.
 
 Use five learning boxes to practise vocabulary, and add, edit or delete entries on the console. Put UTF-8 `.txt` vocabulary lists in `/gbavocab` at the SD-card root (for example `/gbavocab/Spanish.txt`), then choose **LOAD LIST**. Choose **NEW LIST** to create an empty list on the SD card.
 
-The app is built with Butano and targets SuperFW / Supercard SD-style setups. TXT files are compatible with dict.cc-style vocab-trainer exports. The home screen reads `gbavocab V1.2`. V1.2 retains both cards and the existing green/red feedback while A/B is held, then for 24 frames after release (about 0.4 seconds, matching GBAWriter's initial solo-A repeat delay). Holding does not consume this delay. Grading remains on press; only advancement waits longer.
+The app is built with Butano and targets SuperFW / Supercard SD-style setups. TXT files are compatible with dict.cc-style vocab-trainer exports. The home screen reads `gbavocab V1.3`. V1.2 retains both cards and the existing green/red feedback while A/B is held, then for 24 frames after release (about 0.4 seconds, matching GBAWriter's initial solo-A repeat delay). Holding does not consume this delay. Grading remains on press; only advancement waits longer.
 
 Each vocabulary file can contain up to 10,000 entries. The text is streamed from the SD card, so smaller files retain their normal per-file loading, saving, and training performance.
 
@@ -17,11 +17,9 @@ Current flashcard text support uses SuperFW-derived fonts for broad language com
 - Korean Hangul syllables (`U+AC00–U+D7A3`)
 - Imported Arabic uses actual Ghoulam contextual glyphs and lam-alef, RTL runs and display-only harakat filtering. Latin/numbers/punctuation remain SuperFW. Both fields, the editor and Delete preview are supported; no Arabic typing layout was added. Original TXT bytes and logical UTF-8 caret positions are retained. See `docs/arabic.md` and the full-controls manual.
 
-## Local v1.1 input API fix
+## Compact fonts in V1.3
 
-R-API-1 is fixed: public press/release events and frame snapshots share session edges, so canceled R holds cannot restart Caps, empty snapshots cannot tick Caps, and direct presses retain the 48-elapsed-frame threshold. Controls, field capacities and PDFs are unchanged by this follow-up. No Arabic, indexing or save implementation changes were made.
-
-Historical pre-Arabic Caps-only `gbavocab.gba` SHA256: `2e8884364f93cd6a4abf4ddc024750ac6e32346bbfdad11f757123471fa72ec0`. That inherited Caps-only verification and frozen artifacts are recorded in `input-fix-handoff.md` and `input-fix-freeze.json` in the suite v1.1 evidence directory. The new Arabic candidate has separate `arabic-handoff.md` and immutable manifest evidence; neither candidate is published.
+V1.3 shares compact SuperFW glyph data instead of linking expanded flashcard sprite sheets. Korean syllables now use gbareader-style composed Hangul. Non-Korean pixels and advances, Arabic, automatic sizing, V1.2 feedback, controls and TXT persistence are unchanged. Fonts stay in the ROM; no SD font files are needed. The first Credits page is personal-only, followed by four attribution pages. See [compact-font compatibility and inherited coverage limits](docs/compact-fonts.md).
 
 ## Controls
 
@@ -116,5 +114,8 @@ This is an early public source snapshot. It is useful for experimentation and fo
 ### Credits
 
 - [SuperFW](https://github.com/davidgfnet/superfw) by David Guillen Fandos: source of the matching flashcard font packs used for Latin Extended, Greek/Cyrillic, Japanese kana, CJK ideographs, and Korean Hangul coverage.
-- Butano common sprite fonts: used for the small UI text.
+- UNSCII ([viznut.fi/unscii](https://viznut.fi/unscii/)) and Unifont ([unifoundry.com/unifont](https://unifoundry.com/unifont/)): retained GPL font sources, including Hangul components.
+- GBAWriter: retained typing/editor integration.
+- Butano engine and common sprite fonts: unchanged framework and small UI text, zlib license.
+- Ghoulam Regular (2025), Imad AlFil / mloukhiyye, CC BY 4.0: retained Arabic artwork and attribution; [source, license and extraction details](docs/arabic.md).
 - [dict.cc](https://www.dict.cc/): target vocabulary-export format and language-data workflow this trainer is designed around.

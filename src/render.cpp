@@ -20,7 +20,6 @@
 #include "bn_sprite_tiles_ptr.h"
 #include "bn_sprite_shape_size.h"
 #include "bn_sprite_palette_ptr.h"
-#include "bn_utf8_character.h"
 #include "bn_common.h"
 
 #include "bn_core.h"
@@ -31,13 +30,9 @@
 #include "bn_string.h"
 
 #include "common_variable_8x16_sprite_font.h"
-#include "vocab_superfw_latin_ext_font_sprite_font.h"
-#include "vocab_superfw_greek_cyrillic_font_sprite_font.h"
-#include "vocab_superfw_japanese_font_sprite_font.h"
-#include "vocab_superfw_cjk_font_sprite_font.h"
-#include "vocab_superfw_hangul_font_sprite_font.h"
 
 #include "bn_sprite_items_field_underline.h"
+#include "bn_sprite_items_flashcard_palette.h"
 #include "bn_sprite_items_ui_variable_8x16_font.h"
 
 namespace {
@@ -144,67 +139,103 @@ FlashcardFontKind flashcard_font_kind(const char* text)
     return FlashcardFontKind::LATIN;
 }
 
-void generate_body(bn::sprite_text_generator& gen, int y, const char* text,
+void generate_body(const FlashcardFont& font, int y, const char* text,
                    const TextLayout& layout, int step, int scale_eighths,
                    bn::vector<bn::sprite_ptr, 256>& sprites)
 {
     char line[VOCAB_LINE_MAX];
-    for (int i = 0; i < layout.count; ++i) {
-        int length = layout.end[i] - layout.start[i];
-        std::memcpy(line, text + layout.start[i], length);
-        line[length] = 0;
-        if (scale_eighths == 8 && !arabic::contains(text)) {
-            gen.generate(0, y + i * step, line, sprites);
+    const bool shaped_text=arabic::contains(text);
+    for(int i=0;i<layout.count;++i) {
+        int length=layout.end[i]-layout.start[i];
+        std::memcpy(line,text+layout.start[i],length);line[length]=0;
+        if(scale_eighths==8 && !shaped_text) {
+            // Preserve legacy glyph-boundary batching, but skip the packed
+            // line framebuffer and its second conversion into tile order.
+            int width=font.width(line),source_x=0,column=32;
+            [[maybe_unused]] int chunks=0;
+            uint32_t* dest=nullptr;
+            auto palette=bn::sprite_palette_ptr::create(bn::sprite_items::flashcard_palette.palette_item());
+            for(int p=0;p<length;) {
+                unsigned code;decode_utf8_codepoint(line,p,code);
+                uint16_t cols[16];int advance=font.columns(code,cols);
+                if(code!=' ' && advance) {
+                    if(column+advance>32) {
+                        auto tiles=bn::sprite_tiles_ptr::allocate(8,bn::bpp_mode::BPP_4);
+                        dest=reinterpret_cast<uint32_t*>(tiles.vram()->data());
+                        // Volatile forbids byte-store memset lowering on VRAM.
+                        for(int word=0;word<64;++word)
+                            static_cast<volatile uint32_t*>(dest)[word]=0;
+                        sprites.push_back(bn::sprite_ptr::create(source_x+16-width/2,y+i*step,
+                            bn::sprite_shape_size(bn::sprite_shape::WIDE,bn::sprite_size::BIG),tiles,palette));
+#ifdef VOCAB_BODY_TRACE
+                        VOCAB_BODY_TRACE(sprites.back(),line,chunks==0);
+#endif
+                        ++chunks;column=0;
+                    }
+                    paint_native_columns(cols,advance,column,dest);
+                }
+                source_x+=advance;column+=advance;
+            }
             continue;
         }
-        // Only final chunks enter VRAM. Public font APIs read existing ROM
-        // glyphs; the bounded 224x16 packed CPU image lives in EWRAM.
-        static uint32_t pixels[224 * 16 / 8] BN_DATA_EWRAM_BSS;
-        std::memset(pixels, 0, sizeof(pixels));
-        const auto& font = gen.font();
-        const auto& item = font.item();
-        int glyph_width = item.shape_size().width();
-        int source_x = 0;
-        if (arabic::contains(text)) {
-            auto measure=[&](const char* s) { return gen.width(s); };
-            const auto& shaped=arabic::shape(line,measure);
+        static uint32_t pixels[224*16/8] BN_DATA_EWRAM_BSS;
+        std::memset(pixels,0,sizeof(pixels));
+        int source_x=0, starts[28], chunks=0, column=32;
+        const bool native=scale_eighths==8 && !shaped_text;
+        if(shaped_text) {
+            const auto& shaped=arabic::shape(line,[&](const char* s){return font.width(s);});
             source_x=shaped.width;
-            arabic::compose(shaped,scale_eighths,pixels,[&](const arabic::Item& t,int scale,uint32_t* dest) {
+            arabic::compose(shaped,scale_eighths,pixels,[&](const arabic::Item& t,int scale,uint32_t* dest){
                 if(t.code==' ')return;
-                char ch[5];arabic::encode(t.code,ch);bn::utf8_character character(ch);
-                int index=t.code<128?int(t.code)-33:font.utf8_characters_ref().index(character)+94;
-                const auto tiles=item.tiles_item().graphics_tiles_ref(index);
-                paint_body_glyph(reinterpret_cast<const uint32_t*>(tiles.data()),glyph_width,t.advance,t.x,scale,dest);
+                uint16_t cols[16];font.columns(t.code,cols);
+                paint_body_columns(cols,t.advance,t.x,scale,dest);
             });
-        } else for (int p = 0; p < length;) {
-            bn::utf8_character character(line + p);
-            int code = character.data();
-            int index = code < 128 ? code - 33 :
-                font.utf8_characters_ref().index(character) + 94;
-            int width = font.character_widths_ref()[index + 1];
-            if (code != ' ' && width) {
-                const auto tiles = item.tiles_item().graphics_tiles_ref(index);
-                const auto* source = reinterpret_cast<const uint32_t*>(tiles.data());
-                paint_body_glyph(source, glyph_width, width, source_x, scale_eighths, pixels);
+        } else for(int p=0;p<length;) {
+            unsigned code;decode_utf8_codepoint(line,p,code);
+            uint16_t cols[16];int advance=font.columns(code,cols);
+            if(code!=' ' && advance) {
+                if(native && column+advance>32) {
+                    BN_ASSERT(chunks<28,"Body chunks overflow");
+                    starts[chunks++]=source_x;column=0;
+                }
+                paint_body_columns(cols,advance,source_x,scale_eighths,pixels);
             }
-            source_x += width + font.space_between_characters();
-            p += character.size();
+            source_x+=advance;column+=advance;
         }
-        int width = (source_x * scale_eighths + 7) / 8;
-        int height = scale_eighths == 4 ? 8 : 16;
-        auto palette = bn::sprite_palette_ptr::create(gen.palette_item());
-        for (int left = 0; left < width; left += 32) {
-            auto tiles = bn::sprite_tiles_ptr::allocate(height / 2, bn::bpp_mode::BPP_4);
-            auto* dest = reinterpret_cast<uint32_t*>(tiles.vram()->data());
-            for (int sy = 0; sy < height; ++sy) for (int tx = 0; tx < 4; ++tx) {
-                int py = sy - (height - scale_eighths * 2) / 2;
-                dest[(sy / 8) * 32 + tx * 8 + sy % 8] =
-                    py >= 0 && py < scale_eighths * 2 && left / 8 + tx < 28 ?
-                    pixels[py * 28 + left / 8 + tx] : 0;
+        int width=(source_x*scale_eighths+7)/8;
+        int height=scale_eighths==4?8:16;
+        if(!native)for(int left=0;left<width;left+=32)starts[chunks++]=left;
+        auto palette=bn::sprite_palette_ptr::create(bn::sprite_items::flashcard_palette.palette_item());
+        for(int chunk=0;chunk<chunks;++chunk) {
+            int left=starts[chunk];
+            // Only final chunks allocated. Native batches retain Butano's
+            // glyph boundaries/coordinates, including blank trailing columns.
+            auto tiles=bn::sprite_tiles_ptr::allocate(height/2,bn::bpp_mode::BPP_4);
+            auto* dest=reinterpret_cast<uint32_t*>(tiles.vram()->data());
+            for(int sy=0;sy<height;++sy)for(int tx=0;tx<4;++tx) {
+                int py=sy-(height-scale_eighths*2)/2;
+                uint32_t word=0;
+                int px=left+tx*8;
+                int end=native && chunk+1<chunks?starts[chunk+1]:width;
+                if(end>224)end=224;
+                if(py>=0 && py<scale_eighths*2 && px<end) {
+                    // A packed word spans at most two source words. Preserve
+                    // arbitrary native batch alignment without unpacking pixels.
+                    unsigned shift=unsigned(px&7)*4;
+                    word=pixels[py*28+px/8]>>shift;
+                    if(shift && px/8+1<28)
+                        word|=pixels[py*28+px/8+1]<<(32-shift);
+                    int remaining=end-px;
+                    if(remaining<8)word&=(1u<<(remaining*4))-1;
+                }
+                dest[(sy/8)*32+tx*8+sy%8]=word;
             }
-            sprites.push_back(bn::sprite_ptr::create(left + 16 - width / 2, y + i * step,
+            sprites.push_back(bn::sprite_ptr::create(left+16-width/2,y+i*step,
                 bn::sprite_shape_size(bn::sprite_shape::WIDE,
-                    height == 8 ? bn::sprite_size::NORMAL : bn::sprite_size::BIG), tiles, palette));
+                    height==8?bn::sprite_size::NORMAL:bn::sprite_size::BIG),tiles,palette));
+#ifdef VOCAB_BODY_TRACE
+            VOCAB_BODY_TRACE(sprites.back(),line,chunk==0);
+#endif
         }
     }
 }
@@ -222,11 +253,11 @@ static void generate_save_indicator(bn::sprite_text_generator& gen,
 
 Renderer::Renderer()
     : small_gen(common::variable_8x16_sprite_font),
-      latin_gen(vocab_font::vocab_superfw_latin_ext_font_sprite_font),
-      greek_cyrillic_gen(vocab_font::vocab_superfw_greek_cyrillic_font_sprite_font),
-      japanese_gen(vocab_font::vocab_superfw_japanese_font_sprite_font),
-      cjk_gen(vocab_font::vocab_superfw_cjk_font_sprite_font),
-      hangul_gen(vocab_font::vocab_superfw_hangul_font_sprite_font),
+      latin_gen(0),
+      greek_cyrillic_gen(1),
+      japanese_gen(2),
+      cjk_gen(3),
+      hangul_gen(4),
 
       last_line_idx(-1),
       last_field(0),
@@ -242,12 +273,6 @@ Renderer::Renderer()
 {
     small_gen.set_palette_item(bn::sprite_items::ui_variable_8x16_font.palette_item());
     small_gen.set_center_alignment();
-    latin_gen.set_center_alignment();
-    greek_cyrillic_gen.set_center_alignment();
-    japanese_gen.set_center_alignment();
-    cjk_gen.set_center_alignment();
-    hangul_gen.set_center_alignment();
-
 }
 Renderer::~Renderer() {
 }
@@ -263,6 +288,7 @@ void Renderer::reset() {
     for (int i = 0; i < 5; i++) last_counts[i] = -1;
     last_save_status = save_status == SaveStatus::IDLE ? SaveStatus::FAILED : SaveStatus::IDLE;
     text_sprites.clear();
+    answer_begin = answer_end = 0;
     flash_timer_frames = 0;
     flash_color = 0;
 }
@@ -307,6 +333,21 @@ void Renderer::update(const VocabFile& vf, int current_line_idx, int current_fie
         }
     }
 
+    // A pure hide changes no prompt or UI pixels. Retire only the answer's
+    // existing allocations; all other invalidations keep the full redraw path.
+    if(last_show_answer && !show_answer && answer_end>answer_begin &&
+        same_text(current.a,body_text[0]) && same_text(current.b,body_text[1]) &&
+        current_line_idx==last_line_idx && current_field==last_field &&
+        active_side==last_active_side && alternate_mode==last_alternate_mode &&
+        field_is_empty==last_field_is_empty && save_status==last_save_status &&
+        !counts_changed && vf.rejected_rows==rendered_rejected_rows &&
+        vf.line_count==rendered_line_count) {
+        text_sprites.erase(text_sprites.begin()+answer_begin,text_sprites.begin()+answer_end);
+        answer_begin=answer_end=0;
+        last_show_answer=false;
+        return;
+    }
+
     if (!same_text(current.a, body_text[0]) || !same_text(current.b, body_text[1]) ||
         current_line_idx != last_line_idx ||
         current_field != last_field ||
@@ -333,6 +374,7 @@ void Renderer::update_browser(const State& state)
 {
     bn::bg_palettes::set_transparent_color(bn::color(BG_R, BG_G, BG_B));
     text_sprites.clear();
+    answer_begin = answer_end = 0;
 
     small_gen.generate(0, -64, "Select TXT file", text_sprites);
     small_gen.generate(0, -44, "A load   B cancel", text_sprites);
@@ -377,6 +419,7 @@ void Renderer::update_message(const char* text)
 void Renderer::update_switch_confirm()
 {
     text_sprites.clear();
+    answer_begin = answer_end = 0;
     bn::bg_palettes::set_transparent_color(bn::color(BG_R, BG_G, BG_B));
     small_gen.generate(0, -40, "Unsaved progress", text_sprites);
     small_gen.generate(0, -12, "A save", text_sprites);
@@ -388,6 +431,7 @@ void Renderer::update_shuffle_confirm(int current_field)
 {
     bn::bg_palettes::set_transparent_color(bn::color(BG_R, BG_G, BG_B));
     text_sprites.clear();
+    answer_begin = answer_end = 0;
 
     small_gen.generate(0, -36, "Shuffle items", text_sprites);
     bn::string<32> line = bn::format<32>("in box {}?", current_field);
@@ -395,7 +439,7 @@ void Renderer::update_shuffle_confirm(int current_field)
     small_gen.generate(0, 20, "A yes   B no", text_sprites);
 }
 
-bn::sprite_text_generator& Renderer::font_for(const char* text)
+FlashcardFont& Renderer::font_for(const char* text)
 {
             FlashcardFontKind kind = flashcard_font_kind(text);
             return (kind == FlashcardFontKind::HANGUL) ? hangul_gen :
@@ -410,6 +454,9 @@ void Renderer::render_full(const VocabFile& vf, int current_line_idx, int curren
                            bool field_is_empty)
 {
     text_sprites.clear();
+    answer_begin = answer_end = 0;
+    rendered_rejected_rows = vf.rejected_rows;
+    rendered_line_count = vf.line_count;
 
     // Mode indicator (very top, centered): "Mode N" or alternate-mode label.
     {
@@ -440,7 +487,7 @@ void Renderer::render_full(const VocabFile& vf, int current_line_idx, int curren
         body_layout.valid = false;
     }
     if (!field_is_empty && (!body_layout.valid || changed)) {
-        bn::sprite_text_generator* fonts[2] = {&font_for(current.a), &font_for(current.b)};
+        FlashcardFont* fonts[2] = {&font_for(current.a), &font_for(current.b)};
         layout_card(current.a, current.b,
             [&](int side, const char* s) {
                 if(arabic::contains(side?current.b:current.a)) {
@@ -453,8 +500,8 @@ void Renderer::render_full(const VocabFile& vf, int current_line_idx, int curren
     }
 
     if (field_is_empty) {
-        bn::string<8> empty_str = "EMPTY";
-        latin_gen.generate(0, Y_PROMPT, empty_str, text_sprites);
+        TextLayout empty; empty.count=1; empty.start[0]=0; empty.end[0]=5;
+        generate_body(latin_gen,Y_PROMPT,"EMPTY",empty,16,8,text_sprites);
     } else if (!body_layout.valid) {
         // Explicit invariant failure, never silently omit part of a card.
         small_gen.generate(0, 0, "DISPLAY ERROR", text_sprites);
@@ -462,9 +509,11 @@ void Renderer::render_full(const VocabFile& vf, int current_line_idx, int curren
         int prompt = active_side == State::SIDE_A ? 0 : 1;
         for (int side : {prompt, 1 - prompt}) {
             if (side != prompt && !show_answer) continue;
+            if (side != prompt) answer_begin=text_sprites.size();
             generate_body(font_for(body_text[side]), card_side_y(body_layout, side, prompt),
                 body_text[side], body_layout.side[side], body_layout.line_step,
                 body_layout.scale_eighths, text_sprites);
+            if (side != prompt) answer_end=text_sprites.size();
         }
     }
 

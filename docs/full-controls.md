@@ -1,8 +1,10 @@
-# gbavocab V1.2 — full controls
+# gbavocab V1.3 — full controls
 
 Learn vocabulary using flashcards and five learning boxes. Create and edit your own word lists on your Game Boy Advance.
 
 Put UTF-8 TXT vocabulary files in `/gbavocab` at the SD-card root, for example `/gbavocab/Spanish.txt`. Each entry uses a word, a TAB character, and its translation. Optional additional columns are preserved. Files elsewhere on the card are not the list library.
+
+V1.3 shares compact ROM fonts, with gbareader-style composed Korean. Non-Korean pixels, sizing and controls stay unchanged. No SD font files are needed.
 
 Author: Halim Jarrar
 
@@ -10,7 +12,7 @@ Author: Halim Jarrar
 
 Use a compatible SuperFW / Supercard SD-style setup. Copy the runnable `gbavocab.gba` release ROM to your card and launch it with your firmware. Source builds produce the same `gbavocab.gba` filename. Back up your vocabulary TXT files before using any application that edits them.
 
-The home screen reads `gbavocab V1.2` and `files: /gbavocab`. There is no built-in vocabulary, demo list or automatic fallback. Missing storage is reported; Controls and Credits remain available even without a list.
+The home screen reads `gbavocab V1.3` and `files: /gbavocab`. There is no built-in vocabulary, demo list or automatic fallback. Missing storage is reported; Controls and Credits remain available even without a list.
 
 - Up / Down: choose LOAD LIST or NEW LIST. LOAD LIST is first and selected by default.
 - A: open the selected action.
@@ -188,9 +190,9 @@ No permanent `.sav`, settings or sidecar files. Temporary `name.txt.gbv1.tmp` / 
 
 ### Compatibility and credits
 
-Retained display coverage includes Latin Extended, Greek/Cyrillic, Japanese kana, CJK and Hangul from the existing font packs. Coverage is finite, not every Unicode glyph. Ghoulam adds bounded Arabic display (page 7); bundled demo vocabulary remains absent. dict.cc-style vocabulary interchange is supported, but the website may collapse empty groups and lose empty-box gaps on a round trip.
+Retained display coverage includes Latin Extended, Greek/Cyrillic, Japanese kana, CJK and composed Hangul from the existing font packs. Coverage is finite, not every Unicode glyph. Ghoulam adds bounded Arabic display (page 7); bundled demo vocabulary remains absent. dict.cc-style vocabulary interchange is supported, but the website may collapse empty groups and lose empty-box gaps on a round trip.
 
-Author: Halim Jarrar. GBAWriter input engine; SuperFW writing fonts by David Guillen Fandos (GPL v3 or later); Butano engine and UI fonts (zlib); dict.cc vocabulary format. Full licenses, credits and technical notes are in the repository.
+Author: Halim Jarrar. GBAWriter input engine; SuperFW writing fonts by David Guillen Fandos (GPL v3 or later); Butano engine and UI fonts (zlib); dict.cc vocabulary format. UNSCII/Unifont glyph sources and full licenses remain in the repository.
 
 <!-- PAGEBREAK -->
 
@@ -206,9 +208,11 @@ The existing two-field editor and Delete preview use shaped Arabic too. No Arabi
 
 The prompt and revealed answer still share a single screen. Short Latin cards retain their previous appearance; long cards may use reduced text. Arabic artwork is rasterized at the font's native 11-pixel scale before any whole-line reduction, retaining its baseline, bearings and connected advances. Reduced text is necessarily small on the GBA screen.
 
-### Ghoulam attribution and extraction notice
+### Font attribution and extraction notice
 
-Made by Halim Jarrar. (C) 2026. Website: halim-jarrar.de. Contact: monday@halim-jarrar.de. In-app Credits shows these credentials first, with the Arabic font attribution beneath them.
+Retained SuperFW glyphs include UNSCII (viznut.fi/unscii) and Unifont (unifoundry.com/unifont), including the composed Hangul components. Their GPL source notices remain included.
+
+Made by Halim Jarrar. (C) 2026. Website: halim-jarrar.de. Contact: monday@halim-jarrar.de. The first in-app Credits page contains only the four personal lines above. Left / Right traverses five pages; font, framework and license attributions follow on later pages.
 
 Ghoulam Regular, copyright 2025 Imad AlFil / mloukhiyye, licensed CC BY 4.0. Source: https://mloukhiyye.itch.io/ghoulam-arabic-pixel-art-font-version-1
 

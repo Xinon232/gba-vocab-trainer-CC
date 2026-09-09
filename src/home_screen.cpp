@@ -27,8 +27,9 @@ constexpr TextPage help[HOME_HELP_PAGES] = {
     {"Arabic / editing", {"Import Arabic in either field.", "No Arabic typing layout.", "Caret uses logical UTF-8.", "Left/Right: previous/next", "character, not visual order.", "Rows and caret are shaped."}}
 };
 constexpr TextPage credits[HOME_CREDIT_PAGES] = {
-    {"Credits / author", {"Made by Halim Jarrar", "(C) 2026", "halim-jarrar.de", "monday@halim-jarrar.de", "Ghoulam: mloukhiyye", "Arabic font: CC BY 4.0"}},
+    {"Credits / author", {"Made by Halim Jarrar", "(C) 2026", "halim-jarrar.de", "monday@halim-jarrar.de", "", ""}},
     {"Credits", {"gbavocab", "SuperFW fonts and renderer", "by David Guillen Fandos.", "GBAWriter typing engine", "and SuperFW writing font.", "Butano engine and UI font."}},
+    {"Credits / fonts", {"UNSCII / Unifont sources", "viznut.fi/unscii", "unifoundry.com/unifont", "GPL font sources retained.", "Hangul: shared components.", "Exact legacy ASCII retained."}},
     {"Credits / licenses", {"dict.cc vocabulary format.", "SuperFW: GPL v3 or later.", "Butano: zlib license.", "See source LICENSE files", "for full terms and credits.", "github.com/Xinon232/gbavocab"}},
     {"Ghoulam / CC BY 4.0", {"Ghoulam Regular (2025)", "Imad AlFil / mloukhiyye", "mloukhiyye.itch.io", "CC BY 4.0; font source and", "license links in full manual.", "Extracted GSUB / 11px bitmap."}}
 };
@@ -145,7 +146,7 @@ void home_draw(HomePainter& p,const HomeScreen& h,const VocabFile& vf,const char
         return;
     }
     if(h.page()==Page::home) {
-        p.ui(8,0,"gbavocab V1.2");
+        p.ui(8,0,"gbavocab V1.3");
         p.ui(8,20,"files: /gbavocab");
         p.ui(24,48,h.selection()==0?"> LOAD LIST":"  LOAD LIST");
         p.ui(24,72,h.selection()==1?"> NEW LIST":"  NEW LIST");

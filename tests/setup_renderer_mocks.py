@@ -34,6 +34,9 @@ for ns, name, file in fonts:
 #include <cassert>
 #include <memory>
 #define BN_DATA_EWRAM_BSS
+#define BN_ASSERT(test, ...) assert(test)
+// Trace labels only: production compositor still writes all actual pixels.
+#define VOCAB_BODY_TRACE(sprite,line,first) do { if(first) (sprite).text=(line); } while(0)
 namespace bn {
 inline int width_calls=0, generate_calls=0;
 struct color {int r,g,b; color(int r,int g,int b):r(r),g(g),b(b){}};
@@ -100,10 +103,11 @@ class sprite_text_generator {public:
 struct item {int palette_item(){return 0;}sprite_ptr create_sprite(int x,int y){
  static sprite_tiles_ptr shared=sprite_tiles_ptr::allocate(1,bpp_mode::BPP_4);
  sprite_ptr s{shared};s.text="<underline>";s.px=x;s.py=y;s.width=s.height=8;return s;}};
-namespace sprite_items {inline item field_underline,ui_variable_8x16_font;}
+namespace sprite_items {inline item field_underline,ui_variable_8x16_font,flashcard_palette;}
 }
 '''+ '\n'.join(font_data)+'\n')
 headers = ['bn_vector.h','bn_sprite_ptr.h','bn_sprite_text_generator.h','bn_core.h','bn_bg_palettes.h','bn_color.h','bn_format.h','bn_string.h','bn_sprite_items_field_underline.h','bn_sprite_items_ui_variable_8x16_font.h','bn_sprite_shape_size.h','bn_sprite_tiles_ptr.h','bn_tile.h','bn_sprite_palette_ptr.h','bn_utf8_character.h','bn_memory.h','bn_common.h']
 headers += [f[2] for f in fonts]
+headers += ['bn_sprite_items_flashcard_palette.h']
 for h in headers: (p/h).write_text('#include "mock.h"\n')
 print('Created actual-font-metric/32px batching mock headers in', p)

@@ -34,10 +34,22 @@ done
 "$CXX" "${COMMON[@]}" src/vocab.cpp src/vocab_file_io.cpp src/state.cpp tests/test_ui_regressions.cpp -o "$BUILD/ui_regressions"
 "$BUILD/ui_regressions" boxes
 "$BUILD/ui_regressions" gesture
+gcc -std=c11 -O2 -Wno-discarded-qualifiers -Ireferences/gbawriter/src -Ireferences/gbawriter/src/fonts -c src/entry_font.c -o "$BUILD/body_font.o"
 python3 tests/setup_renderer_mocks.py "$BUILD/renderer_mocks"
-"$CXX" -I"$BUILD/renderer_mocks" "${COMMON[@]}" src/vocab.cpp src/vocab_file_io.cpp src/state.cpp src/render.cpp tests/test_feedback_render.cpp -o "$BUILD/feedback_render"
+"$CXX" -I"$BUILD/renderer_mocks" "${COMMON[@]}" src/vocab.cpp src/vocab_file_io.cpp src/state.cpp src/flashcard_font.cpp tests/host_compact_font.cpp "$BUILD/body_font.o" tests/test_compact_body.cpp -o "$BUILD/compact_body"
+"$BUILD/compact_body"
+"$CXX" "${COMMON[@]}" src/flashcard_font.cpp tests/host_compact_font.cpp "$BUILD/body_font.o" tests/test_compact_measure.cpp -Wl,--wrap=entry_font_columns -o "$BUILD/compact_measure"
+"$BUILD/compact_measure"
+python3 tests/test_native_direct_budget.py
+"$CXX" -I"$BUILD/renderer_mocks" "${COMMON[@]}" src/vocab.cpp src/vocab_file_io.cpp src/state.cpp src/flashcard_font.cpp tests/host_compact_font.cpp "$BUILD/body_font.o" tests/test_native_hide_reuse.cpp -o "$BUILD/native_hide"
+"$BUILD/native_hide"
+python3 tests/test_flashcard_font_parity.py
+python3 tests/test_compact_body_wiring.py
+python3 tests/test_body_copy_budget.py
+python3 tests/test_body_column_budget.py
+"$CXX" -I"$BUILD/renderer_mocks" "${COMMON[@]}" src/vocab.cpp src/vocab_file_io.cpp src/state.cpp src/render.cpp src/flashcard_font.cpp tests/host_compact_font.cpp "$BUILD/body_font.o" tests/test_feedback_render.cpp -o "$BUILD/feedback_render"
 "$BUILD/feedback_render"
-"$CXX" -I"$BUILD/renderer_mocks" "${COMMON[@]}" src/vocab.cpp src/vocab_file_io.cpp src/state.cpp src/render.cpp tests/test_renderer_regressions.cpp -o "$BUILD/renderer_regressions"
+"$CXX" -I"$BUILD/renderer_mocks" "${COMMON[@]}" src/vocab.cpp src/vocab_file_io.cpp src/state.cpp src/render.cpp src/flashcard_font.cpp tests/host_compact_font.cpp "$BUILD/body_font.o" tests/test_renderer_regressions.cpp -o "$BUILD/renderer_regressions"
 "$BUILD/renderer_regressions"
 "$BUILD/renderer_regressions" tests/fixtures/arabic/sample1.txt
 "$BUILD/renderer_regressions" tests/fixtures/arabic/sample2.txt
