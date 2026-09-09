@@ -1,4 +1,4 @@
-# gbavocab V1.1 candidate — full controls
+# gbavocab V1.2 — full controls
 
 Learn vocabulary using flashcards and five learning boxes. Create and edit your own word lists on your Game Boy Advance.
 
@@ -10,7 +10,7 @@ Author: Halim Jarrar
 
 Use a compatible SuperFW / Supercard SD-style setup. Copy the runnable `gbavocab.gba` release ROM to your card and launch it with your firmware. Source builds produce the same `gbavocab.gba` filename. Back up your vocabulary TXT files before using any application that edits them.
 
-The home screen reads `gbavocab V1.1` and `files: /gbavocab`. There is no built-in vocabulary, demo list or automatic fallback. Missing storage is reported; Controls and Credits remain available even without a list.
+The home screen reads `gbavocab V1.2` and `files: /gbavocab`. There is no built-in vocabulary, demo list or automatic fallback. Missing storage is reported; Controls and Credits remain available even without a list.
 
 - Up / Down: choose LOAD LIST or NEW LIST. LOAD LIST is first and selected by default.
 - A: open the selected action.
@@ -42,7 +42,7 @@ Each entry has a front (word) and back (translation), and belongs to one of five
 - Hold R: reveal the answer. Release R to hide it during normal learning.
 - A: mark correct, advance one box (Box 5 stays Box 5), then show the next card in the current box.
 - B: mark wrong and return the entry to Box 1. An entry already in Box 1 moves to its end so another card can come next.
-- Hold the A or B used for a judgment: keep its word and answer visible in green / red feedback until release, after the brief minimum feedback display. Holding does not repeatedly grade cards.
+- Hold the A or B used for a judgment: keep both word and answer visible with the same green / red background. After release, feedback stays for 24 frames (about 0.4 seconds), matching GBAWriter's initial solo-A space-repeat delay. Holding consumes none of that delay and does not repeatedly grade cards. Grading still happens on press; the next card and alternating prompt side wait until feedback ends.
 - Left / Right: previous / next box, wrapping between boxes 1 and 5. Empty boxes remain selectable. These buttons never page or scroll a flashcard.
 - Up: undo the most recent eligible A/B decision while still in the same box, returning to that card. This is single-step learning undo, not entry-edit undo. A in Box 5 does not arm a box-change undo. Changing boxes, requesting shuffle or committing an entry clears the relevant undo history.
 - Down: ask to shuffle only the current box. In that prompt, A confirms and B cancels.
@@ -216,4 +216,4 @@ License: https://creativecommons.org/licenses/by/4.0/
 
 For this app the supplied TTF's actual unencoded GSUB initial, medial, final and lam-alef glyphs were extracted as monochrome ROM bitmap tables at 11 pixels. This conversion, display-only mark filtering and punctuation/digit fallbacks are app changes, not a modified font endorsed by the author. SuperFW remains the font for Latin, numbers and ordinary punctuation. The source font hash and reproducible extractor are included in the local source and evidence.
 
-This is a local V1.1 candidate, not a published release. Test backed-up copies of the supplied lists on your actual SD card and firmware. Emulator/RAM-fixture checks do not verify real Supercard storage or physical-device readability.
+Test backed-up copies of the supplied lists on your actual SD card and firmware. Emulator/RAM-fixture checks do not verify real Supercard storage or physical-device readability.

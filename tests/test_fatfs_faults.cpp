@@ -123,7 +123,7 @@ int main(int argc,char** argv){
  }
  if(mode=="reopen-ok" || mode=="reopen-fail"){
   State state;State::InputState input;input.a_pressed=true;state.update(v,input);
-  input={};for(int frame=0;frame<20;++frame)state.update(v,input);
+  input={};for(int frame=0;frame<24;++frame)state.update(v,input);
   assert(state.current_line_idx()==1);assert(state.undo_pending());
   bool committed=false, reopen_attempted=false;
   fat_hook=[&](auto op,auto p){

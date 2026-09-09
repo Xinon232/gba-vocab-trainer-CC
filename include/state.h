@@ -144,6 +144,8 @@ private:
     // Feedback scene: after A/B, keep the pressed card visible with
     // answer shown during the green/red flash. Only after the flash
     // expires do we advance to the next word and toggle alternation.
+    // The initial Writer solo-A delay counts only frames without the judgment
+    // button held; holding cannot consume the post-release display time.
     int feedback_line_idx_;
     FlashRequest feedback_judgment_;
     bool feedback_toggle_alternation_;

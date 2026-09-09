@@ -4,7 +4,7 @@ Learn vocabulary with flashcards and create your own word lists on your Game Boy
 
 Use five learning boxes to practise vocabulary, and add, edit or delete entries on the console. Put UTF-8 `.txt` vocabulary lists in `/gbavocab` at the SD-card root (for example `/gbavocab/Spanish.txt`), then choose **LOAD LIST**. Choose **NEW LIST** to create an empty list on the SD card.
 
-The app is built with Butano and targets SuperFW / Supercard SD-style setups. TXT files are compatible with dict.cc-style vocab-trainer exports. The home screen reads `gbavocab V1.1`. This is a local v1.1 candidate with Ghoulam Arabic display, not a published release.
+The app is built with Butano and targets SuperFW / Supercard SD-style setups. TXT files are compatible with dict.cc-style vocab-trainer exports. The home screen reads `gbavocab V1.2`. V1.2 retains both cards and the existing green/red feedback while A/B is held, then for 24 frames after release (about 0.4 seconds, matching GBAWriter's initial solo-A repeat delay). Holding does not consume this delay. Grading remains on press; only advancement waits longer.
 
 Each vocabulary file can contain up to 10,000 entries. The text is streamed from the SD card, so smaller files retain their normal per-file loading, saving, and training performance.
 
@@ -36,8 +36,8 @@ Home:
 Training screen:
 
 - R: hold to reveal the answer
-- A: mark the current word correct and move it to the next box; shows a green feedback flash with word + answer before advancing, and holding A keeps that feedback visible until release
-- B: reset the current word back to box 1; shows a red feedback flash with word + answer before advancing, and holding B keeps that feedback visible until release
+- A: mark the current word correct and move it to the next box; shows a green feedback flash with word + answer before advancing, and holding A keeps that feedback visible until 24 frames after release
+- B: reset the current word back to box 1; shows a red feedback flash with word + answer before advancing, and holding B keeps that feedback visible until 24 frames after release
 - D-pad Left / Right: switch between boxes 1-5
 - D-pad Up: undo the most recent A/B decision, if you stayed in the same box
 - D-pad Down: ask to shuffle only the current box

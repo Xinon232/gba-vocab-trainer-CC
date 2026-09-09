@@ -23,7 +23,7 @@ private:
     bool save_first_ = false;
 };
 
-constexpr int HOME_HELP_PAGES = 21;
+constexpr int HOME_HELP_PAGES = 22;
 constexpr int HOME_CREDIT_PAGES = 4;
 const char* home_help_heading(int page);
 const char* home_help_line(int page, int line);

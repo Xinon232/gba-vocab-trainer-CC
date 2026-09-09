@@ -28,7 +28,7 @@ static void load_n_pairs(VocabFile& vf, int n)
 
 static void finish_feedback(State& state, VocabFile& vf)
 {
-    for (int i = 0; i < 12 && state.feedback_active(); ++i) {
+    for (int i = 0; i < 24 && state.feedback_active(); ++i) {
         state.update(vf, State::InputState{});
     }
 }
@@ -607,7 +607,7 @@ static int test_feedback_delays_advance_and_shows_answer()
         printf("    FAIL: advanced before feedback finished\n");
         return 1;
     }
-    for (int frame = 0; frame < 9; ++frame) {
+    for (int frame = 0; frame < 23; ++frame) {
         state.update(vf, State::InputState{});
         if (!state.feedback_active() || !state.show_answer()) {
             printf("    FAIL: feedback ended before short flash completed at frame %d\n", frame + 1);

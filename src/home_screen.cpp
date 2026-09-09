@@ -7,6 +7,7 @@ constexpr TextPage help[HOME_HELP_PAGES] = {
     {"Home / lists", {"Up/Down: choose; A: open.", "LOAD LIST is the default.", "NEW LIST: unused TXT name.", "A: create shown name.", "B: back; home B: resume.", "No card: no demo list."}},
     {"Browsing / switching", {"Up/Down: select a file.", "Left/Right: jump 5 files.", "A: load; B: return home.", "Dirty list: A Save,", "B Discard, Select Cancel.", "Failure keeps active list."}},
     {"Learning", {"Hold R: reveal answer.", "A: correct, next box.", "B: wrong, back to Box 1.", "Hold A/B: keep feedback.", "Left/Right: boxes 1-5.", "Up: undo in the same box."}},
+    {"Learning / feedback", {"Hold A/B: keep both cards.", "Same green/red background.", "Release: 24 frames more.", "About 0.4 sec, then next.", "Holding uses no delay time.", "One judgment per press."}},
     {"Learning / shortcuts", {"Down: shuffle current box.", "Then A: yes; B: cancel.", "L: front, back, alternating.", "Start alone: save on release.", "Select alone: home on release.", "Start+Select: Entry editor."}},
     {"Entry menu", {"Up/Down: choose; A: open.", "Add, Edit, Delete, Autosave.", "B: return to learning.", "Delete: Left/Right No/Yes;", "A: confirm; B: cancel.", "Add goes first in Box 1."}},
     {"Entry drafts", {"1/2: word; 2/2: translation.", "Start+A: next, then confirm.", "Start+B: previous draft;", "from 1/2: cancel changes.", "Edit keeps box and progress.", "Both fields must have text."}},
@@ -144,7 +145,7 @@ void home_draw(HomePainter& p,const HomeScreen& h,const VocabFile& vf,const char
         return;
     }
     if(h.page()==Page::home) {
-        p.ui(8,0,"gbavocab V1.1");
+        p.ui(8,0,"gbavocab V1.2");
         p.ui(8,20,"files: /gbavocab");
         p.ui(24,48,h.selection()==0?"> LOAD LIST":"  LOAD LIST");
         p.ui(24,72,h.selection()==1?"> NEW LIST":"  NEW LIST");

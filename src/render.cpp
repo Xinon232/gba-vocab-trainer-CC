@@ -282,7 +282,7 @@ void Renderer::update(const VocabFile& vf, int current_line_idx, int current_fie
 {
     notice = nullptr; // browser-operation notices end on returning to training
     // Background: white, or the existing feedback color. The normal timer is
-    // unchanged; feedback_active extends it while A/B remains held.
+    // unchanged; feedback_active extends it through the release countdown.
     if (flash_timer_frames > 0 || feedback_active) {
         if (flash_timer_frames > 0) {
             flash_timer_frames--;

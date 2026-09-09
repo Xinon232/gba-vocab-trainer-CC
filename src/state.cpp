@@ -3,6 +3,7 @@
 
 #include "state.h"
 #include "vocab_file_io.h"
+#include "writer_core.h"
 
 #include <cstdio>
 
@@ -10,7 +11,8 @@ constexpr int SCENE_TRAIN = 0;
 constexpr int SCENE_BROWSE = 1;
 constexpr int SCENE_SHUFFLE_CONFIRM = 2;
 constexpr int SCENE_FEEDBACK = 3;
-constexpr int FEEDBACK_FRAMES = 10;
+// Match Writer's initial solo-A repeat delay, counted only after release.
+constexpr int FEEDBACK_FRAMES = writer::InputState::NAV_REPEAT_DELAY;
 
 State::State()
     : current_line_idx_(0),
@@ -225,12 +227,12 @@ bool State::update(VocabFile& vf, const InputState& in)
     }
     if (scene_ == SCENE_FEEDBACK) {
         show_answer_ = true;
-        if (feedback_frames_left_ > 0) {
-            --feedback_frames_left_;
-        }
         bool judgment_held =
             (feedback_judgment_ == FLASH_GREEN && in.a_held) ||
             (feedback_judgment_ == FLASH_RED && in.b_held);
+        if (!judgment_held && feedback_frames_left_ > 0) {
+            --feedback_frames_left_;
+        }
         if (feedback_frames_left_ <= 0 && ! judgment_held) {
             finish_feedback(vf);
         }

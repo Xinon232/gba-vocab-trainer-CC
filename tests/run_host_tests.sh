@@ -35,6 +35,8 @@ done
 "$BUILD/ui_regressions" boxes
 "$BUILD/ui_regressions" gesture
 python3 tests/setup_renderer_mocks.py "$BUILD/renderer_mocks"
+"$CXX" -I"$BUILD/renderer_mocks" "${COMMON[@]}" src/vocab.cpp src/vocab_file_io.cpp src/state.cpp src/render.cpp tests/test_feedback_render.cpp -o "$BUILD/feedback_render"
+"$BUILD/feedback_render"
 "$CXX" -I"$BUILD/renderer_mocks" "${COMMON[@]}" src/vocab.cpp src/vocab_file_io.cpp src/state.cpp src/render.cpp tests/test_renderer_regressions.cpp -o "$BUILD/renderer_regressions"
 "$BUILD/renderer_regressions"
 "$BUILD/renderer_regressions" tests/fixtures/arabic/sample1.txt

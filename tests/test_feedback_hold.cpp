@@ -1,91 +1,67 @@
-// Regression test for v0.2.5 held-button feedback.
+// Production State frame boundaries for V1.2 release-delayed feedback.
 #include "vocab.h"
 #include "state.h"
-
+#include "writer_core.h"
+#include <cassert>
 #include <cstdio>
 #include <cstring>
+#include <initializer_list>
 
-static void load_pairs(VocabFile& vf)
+static void check(bool correct, int held_frames)
 {
-    vf.reset();
+    VocabFile vf;
     const char* data = "one\tuno\ntwo\tdos\nthree\ttres\n";
     vocab_open(vf, data, int(strlen(data)));
-}
-
-static int test_a_hold()
-{
-    VocabFile vf;
-    load_pairs(vf);
     State state;
-    state.debug_set_field(1);
-    state.debug_set_line(0);
-    uint32_t pressed_offset = vf.line_offsets[0];
-
+    const uint32_t offset = vf.line_offsets[0];
+    const auto side = state.active_side();
     State::InputState in;
-    in.a_pressed = true;
-    in.a_held = true;
+    in.a_pressed = in.a_held = correct;
+    in.b_pressed = in.b_held = !correct;
     state.update(vf, in);
-
-    for(int frame = 0; frame < 80; ++frame) {
-        in = State::InputState{};
-        in.a_held = true;
+    const int graded = state.current_line_idx();
+    assert(vf.field[graded] == (correct ? 2 : 1)); // grade still on press
+    assert(state.consume_flash() == (correct ? State::FLASH_GREEN : State::FLASH_RED));
+    auto preserved = [&] {
+        assert(state.feedback_active());
+        assert(state.show_answer());
+        assert(vf.line_offsets[state.current_line_idx()] == offset);
+        assert(state.active_side() == side);
+        assert(vf.field[graded] == (correct ? 2 : 1));
+        assert(state.consume_flash() == State::FLASH_NONE); // no repeat grading
+    };
+    preserved();
+    for(int frame = 0; frame < held_frames; ++frame) {
+        in = {};
+        in.a_held = correct;
+        in.b_held = !correct;
         state.update(vf, in);
+        preserved();
     }
-
-    if(! state.feedback_active() || ! state.show_answer() ||
-       vf.line_offsets[state.current_line_idx()] != pressed_offset) {
-        std::printf("FAIL: held A did not preserve feedback card + answer\n");
-        return 1;
+    // Release is elapsed frame 1: all 23 preceding boundaries retain both
+    // sides; frame 24 advances once. A long hold must not consume this delay.
+    for(int frame = 1; frame < 24; ++frame) {
+        state.update(vf, {});
+        preserved();
     }
-
-    state.update(vf, State::InputState{});  // release A
-    if(state.feedback_active() || state.show_answer() ||
-       vf.line_offsets[state.current_line_idx()] == pressed_offset) {
-        std::printf("FAIL: releasing A did not finish feedback and advance\n");
-        return 1;
-    }
-    return 0;
+    state.update(vf, {});
+    assert(!state.feedback_active() && !state.show_answer());
+    assert(vf.line_offsets[state.current_line_idx()] != offset);
+    assert(state.active_side() != side);
+    const int next = state.current_line_idx();
+    state.update(vf, {});
+    assert(state.current_line_idx() == next);
+    State::InputState undo;
+    undo.up_pressed = true;
+    state.update(vf, undo);
+    assert(vf.line_offsets[state.current_line_idx()] == offset);
+    assert(vf.field[state.current_line_idx()] == 1);
+    assert(state.active_side() == side);
 }
-
-static int test_b_hold()
-{
-    VocabFile vf;
-    load_pairs(vf);
-    State state;
-    state.debug_set_field(1);
-    state.debug_set_line(0);
-    uint32_t pressed_offset = vf.line_offsets[0];
-
-    State::InputState in;
-    in.b_pressed = true;
-    in.b_held = true;
-    state.update(vf, in);
-
-    for(int frame = 0; frame < 80; ++frame) {
-        in = State::InputState{};
-        in.b_held = true;
-        state.update(vf, in);
-    }
-
-    if(! state.feedback_active() || ! state.show_answer() ||
-       vf.line_offsets[state.current_line_idx()] != pressed_offset) {
-        std::printf("FAIL: held B did not preserve feedback card + answer\n");
-        return 1;
-    }
-
-    state.update(vf, State::InputState{});  // release B
-    if(state.feedback_active() || state.show_answer() ||
-       vf.line_offsets[state.current_line_idx()] == pressed_offset) {
-        std::printf("FAIL: releasing B did not finish feedback and advance\n");
-        return 1;
-    }
-    return 0;
-}
-
 int main()
 {
-    int rc = test_a_hold() | test_b_hold();
-    if(rc) return 1;
-    std::printf("PASS: held A/B feedback persists until release\n");
-    return 0;
+    static_assert(writer::InputState::NAV_REPEAT_DELAY == 24);
+    for(bool correct : {false, true})
+        for(int held : {0, 1, 23, 24, 80, 600}) check(correct, held);
+    puts("PASS A/B: grade once on press; held cards retained; 24 release frames; advance/alternation/undo unchanged");
 }
