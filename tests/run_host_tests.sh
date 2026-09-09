@@ -12,7 +12,7 @@ case "${1:-}" in
 esac
 CXX=${CXX:-g++}
 COMMON=(-std=c++17 -O2 -Wall -Wextra -Iinclude src/writer_core.cpp)
-for name in test_entry_shortcuts test_entry_state test_vocab test_vocab_10k test_vocab_grouped test_vocab_file_io_perf test_state test_feedback_hold test_integration test_save_status test_empty_boxes test_scan_limits test_scan_visit test_long_display test_embedded_control test_switch test_page_input test_save_navigation test_text_layout test_body_pixels; do
+for name in test_entry_shortcuts test_entry_state test_vocab test_vocab_10k test_vocab_grouped test_vocab_file_io_perf test_state test_feedback_hold test_integration test_save_status test_empty_boxes test_scan_limits test_scan_visit test_long_display test_embedded_control test_switch test_page_input test_save_navigation test_text_layout test_body_pixels test_arabic_import test_arabic_text test_arabic_pixels; do
   if $CORRECTNESS_ONLY && [[ "$name" == test_vocab_file_io_perf ]]; then continue; fi
   "$CXX" "${COMMON[@]}" src/vocab.cpp src/vocab_file_io.cpp src/state.cpp "tests/$name.cpp" -o "$BUILD/$name"
   "$BUILD/$name"
@@ -37,6 +37,12 @@ done
 python3 tests/setup_renderer_mocks.py "$BUILD/renderer_mocks"
 "$CXX" -I"$BUILD/renderer_mocks" "${COMMON[@]}" src/vocab.cpp src/vocab_file_io.cpp src/state.cpp src/render.cpp tests/test_renderer_regressions.cpp -o "$BUILD/renderer_regressions"
 "$BUILD/renderer_regressions"
+"$BUILD/renderer_regressions" tests/fixtures/arabic/sample1.txt
+"$BUILD/renderer_regressions" tests/fixtures/arabic/sample2.txt
+"$CXX" "${COMMON[@]}" src/writer_layout.cpp tests/test_arabic_layout.cpp -o "$BUILD/arabic_layout"
+"$BUILD/arabic_layout"
+"$CXX" "${COMMON[@]}" tests/test_solo_r.cpp -o "$BUILD/solo_r"
+"$BUILD/solo_r"
 for name in core frames layout; do
   "$CXX" "${COMMON[@]}" src/writer_layout.cpp "tests/test_writer_$name.cpp" -o "$BUILD/writer_$name"
   "$BUILD/writer_$name"
@@ -52,6 +58,8 @@ done
 gcc -std=c11 -Wno-discarded-qualifiers -Ireferences/gbawriter/src -Ireferences/gbawriter/src/fonts -c src/entry_font.c -o "$BUILD/entry_font.o"
 "$CXX" "${COMMON[@]}" -Ireferences/gbawriter/src/fonts src/writer_layout.cpp src/entry_editor.cpp src/entry_render.cpp src/vocab.cpp tests/test_entry_render.cpp "$BUILD/entry_font.o" -o "$BUILD/entry_render"
 "$BUILD/entry_render" references/gbawriter/res/fonts.pack references/gbawriter/res/reader-symbols.pack
+"$CXX" "${COMMON[@]}" -Ireferences/gbawriter/src/fonts src/writer_layout.cpp src/entry_editor.cpp src/entry_render.cpp src/vocab.cpp tests/test_arabic_entry.cpp "$BUILD/entry_font.o" -o "$BUILD/arabic_entry"
+"$BUILD/arabic_entry"
 python3 tests/test_entry_wiring.py
 python3 tests/test_no_sav_persistence.py
 python3 tests/test_ui_palette.py
@@ -69,6 +77,8 @@ done
 python3 tests/test_no_arabic_fonts.py
 gcc -std=c11 -Wall -Wextra -Wno-discarded-qualifiers -Wno-old-style-declaration -Ireferences/gbawriter/src -Ireferences/gbawriter/src/fonts tests/test_entry_font_coverage.c -o "$BUILD/entry_font_coverage"
 "$BUILD/entry_font_coverage"
+"$CXX" -std=c++17 -Iinclude -DHOME_SCREEN_HOST_TEST src/home_screen.cpp tests/test_credit_credentials.cpp -o "$BUILD/credit_credentials"
+"$BUILD/credit_credentials"
 bash tests/run_home_tests.sh
 bash tests/run_select_accent_tests.sh
 python3 tests/test_select_accent_docs.py

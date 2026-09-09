@@ -55,6 +55,11 @@ static bool append_utf8_codepoint(char* out, int& out_len, unsigned code)
 static bool font_supports_codepoint(unsigned code)
 {
     if (code >= 0x20 && code <= 0x7E) return true;
+    // Preserve logical Arabic and joining controls in the display copy. The
+    // bounded Ghoulam compositor selects forms/omits marks, never the TXT path.
+    if ((code >= 0x0600 && code <= 0x06FF) ||
+        (code >= 0x0750 && code <= 0x077F) ||
+        (code >= 0x0870 && code <= 0x08FF) || code == 0x200C || code == 0x200D) return true;
 
     // SuperFW-derived flashcard fonts generated in tests/build_superfw_flashcard_fonts.py.
     if (code >= 0x0080 && code <= 0x024F) return true;  // Latin Extended

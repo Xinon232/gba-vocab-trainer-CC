@@ -1,4 +1,5 @@
 #include "entry_render.h"
+#include "arabic_text.h"
 extern "C" {
 #include "../references/gbawriter/src/fonts/font_render.h"
 }
@@ -11,6 +12,26 @@ void line(uint8_t* px,int x,int y,const char* s,int max=224) {
 void pixel(uint8_t* px,int x,int y) {
     volatile uint16_t* p=reinterpret_cast<volatile uint16_t*>(px+y*240+(x&~1));
     *p=(x&1)?uint16_t((*p&0x00ff)|0x0100):uint16_t((*p&0xff00)|1);
+}
+void shaped_line(uint8_t* px,int x,int y,const char* text,int n,int scale=8) {
+#ifdef __DEVKITARM__
+    static uint32_t packed[448] __attribute__((section(".sbss")));
+    alignas(2) static uint8_t glyph[256] __attribute__((section(".sbss")));
+#else
+    static uint32_t packed[448];alignas(2) static uint8_t glyph[256];
+#endif
+    std::memset(packed,0,sizeof(packed));
+    const auto& shaped=arabic::shape(text,[](const char* ch){return int(font_width(ch));},n);
+    arabic::compose(shaped,scale,packed,[&](const arabic::Item& t,int sc,uint32_t* out){
+        char ch[5];arabic::encode(t.code,ch);std::memset(glyph,0,sizeof(glyph));
+        draw_text_idx8_bus16_range(ch,glyph,0,16,16,1);
+        for(int gy=0;gy<16;++gy)for(int gx=0;gx<16&&gx<t.advance;++gx)if(glyph[gy*16+gx]){
+            int dx=(t.x+gx)*sc/8,dy=gy*sc/8;
+            if(dx<224)out[dy*28+dx/8]|=1u<<((dx%8)*4);
+        }
+    });
+    for(int gy=0;gy<16;++gy)for(int gx=0;gx<224;++gx)
+        if(x+gx<240&&y+gy<160&&((packed[gy*28+gx/8]>>((gx%8)*4))&15))pixel(px,x+gx,y+gy);
 }
 }
 int entry_glyph_width(const char* text) {return int(font_width(text));}
@@ -43,6 +64,11 @@ void render_entry(EntryEditor& e,uint8_t* px,EntryUiLine ui,void* context) {
                 for(int r=0;r<layout.rows();++r,++visible_row) {
                     int x=0,y=22+visible_row*18/scale;
                     auto end=r+1<layout.rows()?layout.row_start(r+1):text.bytes();
+                    if(arabic::contains(field)) {
+                        auto start=layout.row_content_start(text,r);
+                        shaped_line(px,8,y,text.data()+start,int(end-start),8/scale);
+                        continue;
+                    }
                     for(auto p=layout.row_content_start(text,r);p<end;) {
                         char ch[5];p=writer::Layout::character(text.data(),p,ch);
                         int w=layout.width(ch);
@@ -71,6 +97,11 @@ void render_entry(EntryEditor& e,uint8_t* px,EntryUiLine ui,void* context) {
         for(int row=e.viewport();row<last;++row) {
             int x=8,y=36+(row-e.viewport())*writer::TEXT_PITCH;
             auto end=row+1<layout.rows()?layout.row_start(row+1):text.bytes();
+            if(arabic::contains(s)) {
+                auto start=layout.row_content_start(text,row);
+                shaped_line(px,x,y,s+start,int(end-start));
+                continue;
+            }
             for(auto p=layout.row_content_start(text,row);p<end;) {
                 char ch[5];p=writer::Layout::character(s,p,ch);if(ch[0]=='\n')break;
                 int w=layout.width(ch);if(w&&ch[0]!='\t')line(px,x,y,ch,228-x);x+=w;

@@ -13,18 +13,23 @@ constexpr TextPage help[HOME_HELP_PAGES] = {
     {"Saving entries", {"Autosave OFF each startup.", "OFF: changes stay in RAM.", "Learning Start: save all.", "ON: save confirmed changes.", "No saving each keystroke.", "Save before powering off."}},
     {"Typing letters", {"Hold a direction, then", "B/A/R: letter 1/2/3.", "Up: abc    Right: def", "Down: hij  Left: klm", "Hold Down, tap R twice: g.", "Keep Down held for both."}},
     {"Typing / L layer", {"Hold L and a direction:", "Up: nop    Right: qrs", "Down: tuw  Left: xyz", "B/A/R: letter 1/2/3.", "L+Down, tap R twice: v.", "Keep L+Down held for both."}},
-    {"Spaces / case", {"A alone: space; B: delete.", "Hold alone to repeat A/B.", "Tap R alone: Shift.", "Tap R again: Caps.", "Tap R in Caps: lowercase.", "Shift applies to one letter."}},
+    {"Spaces / case", {"A alone: space; B: delete.", "Hold alone to repeat A/B.", "Normal: short R release", "arms one-shot Shift.", "Hold R alone 48 frames:", "Caps while held (~0.8 sec)."}},
+    {"R hold / chords", {"Any other key cancels hold.", "Release R; start R alone.", "Shift/Caps: isolated R", "clears only on release.", "Short or long; no rearming.", "Shift: next accepted letter."}},
     {"Symbols", {"Select: new period unless", "a producing chord stays held.", "Hold Select to replace it:", "Up/Down: cycle 1234567890.", "Right/Left: .()/;@#%&_+=-", "R/L alone: cycle .,'\":!?"}},
     {"Accents / Select first", {"Hold Select, then type", "a supported letter chord.", "Its first accent replaces", "the new provisional symbol.", "Keep Select and group held.", "Release/repress its B/A/R."}},
     {"Accents / letter first", {"Type a letter; keep holding.", "Keep exact direction held,", "L if used, and producing", "B/A/R held; then Select.", "Same letter; case retained.", "No extra letter or period."}},
     {"Accents / held chord", {"No time limit; no release.", "Changing chord ends eligibility.", "No alternate: unchanged.", "Up+B held, then Select:", "a becomes its first accent.", "Only that same letter changes."}},
     {"Accents / cycle / keep", {"Keep Select and group held.", "Release/repress its B/A/R.", "Each press cycles an accent.", "Release Select to keep it.", "Shift/Caps keep letter case.", "The sharp s stays lowercase."}},
     {"Caret / status", {"Start+Left/Right: caret.", "Start+Up/Down: visual row.", "Start+L/R: previous/next page.", "Start+Select: toggle status.", "Only NEW Select insertion", "is removed; converted stays."}},
-    {"Typing / limits", {"Start+Select: toggle status.", "Start alone: no newline.", "No tabs or newlines in fields.", "191 UTF-8 bytes per row", "including tab / extra columns.", "10,000 entries per list."}}
+    {"Typing / limits", {"Start+Select: toggle status.", "Start alone: no newline.", "No tabs or newlines in fields.", "191 UTF-8 bytes per row", "including tab / extra columns.", "10,000 entries per list."}},
+    {"Imported Arabic", {"Ghoulam contextual letters.", "Arabic runs read right to left.", "Latin and digits stay LTR.", "Harakat hidden, bytes kept.", "Arabic comma displays as ,", "Missing artwork displays ?."}},
+    {"Arabic / editing", {"Import Arabic in either field.", "No Arabic typing layout.", "Caret uses logical UTF-8.", "Left/Right: previous/next", "character, not visual order.", "Rows and caret are shaped."}}
 };
 constexpr TextPage credits[HOME_CREDIT_PAGES] = {
+    {"Credits / author", {"Made by Halim Jarrar", "(C) 2026", "halim-jarrar.de", "monday@halim-jarrar.de", "Ghoulam: mloukhiyye", "Arabic font: CC BY 4.0"}},
     {"Credits", {"gbavocab", "SuperFW fonts and renderer", "by David Guillen Fandos.", "GBAWriter typing engine", "and SuperFW writing font.", "Butano engine and UI font."}},
-    {"Credits / licenses", {"dict.cc vocabulary format.", "SuperFW: GPL v3 or later.", "Butano: zlib license.", "See source LICENSE files", "for full terms and credits.", "github.com/Xinon232/gbavocab"}}
+    {"Credits / licenses", {"dict.cc vocabulary format.", "SuperFW: GPL v3 or later.", "Butano: zlib license.", "See source LICENSE files", "for full terms and credits.", "github.com/Xinon232/gbavocab"}},
+    {"Ghoulam / CC BY 4.0", {"Ghoulam Regular (2025)", "Imad AlFil / mloukhiyye", "mloukhiyye.itch.io", "CC BY 4.0; font source and", "license links in full manual.", "Extracted GSUB / 11px bitmap."}}
 };
 }
 const char* home_help_heading(int p) { return help[p].heading; }
@@ -139,7 +144,7 @@ void home_draw(HomePainter& p,const HomeScreen& h,const VocabFile& vf,const char
         return;
     }
     if(h.page()==Page::home) {
-        p.ui(8,0,"gbavocab V1.0");
+        p.ui(8,0,"gbavocab V1.1");
         p.ui(8,20,"files: /gbavocab");
         p.ui(24,48,h.selection()==0?"> LOAD LIST":"  LOAD LIST");
         p.ui(24,72,h.selection()==1?"> NEW LIST":"  NEW LIST");

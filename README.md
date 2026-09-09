@@ -4,7 +4,7 @@ Learn vocabulary with flashcards and create your own word lists on your Game Boy
 
 Use five learning boxes to practise vocabulary, and add, edit or delete entries on the console. Put UTF-8 `.txt` vocabulary lists in `/gbavocab` at the SD-card root (for example `/gbavocab/Spanish.txt`), then choose **LOAD LIST**. Choose **NEW LIST** to create an empty list on the SD card.
 
-The app is built with Butano and targets SuperFW / Supercard SD-style setups. TXT files are compatible with dict.cc-style vocab-trainer exports. The home screen identifies this release as `gbavocab V1.0`.
+The app is built with Butano and targets SuperFW / Supercard SD-style setups. TXT files are compatible with dict.cc-style vocab-trainer exports. The home screen reads `gbavocab V1.1`. This is a local v1.1 candidate with Ghoulam Arabic display, not a published release.
 
 Each vocabulary file can contain up to 10,000 entries. The text is streamed from the SD card, so smaller files retain their normal per-file loading, saving, and training performance.
 
@@ -15,7 +15,13 @@ Current flashcard text support uses SuperFW-derived fonts for broad language com
 - Japanese punctuation, Hiragana, and Katakana (`U+3000–U+30FF`)
 - CJK Unified Ideographs (`U+4E00–U+9FEF`) plus SuperFW's included CJK Extension-B subset (`U+20000–U+200CC`) for Chinese/Japanese/Korean Han characters
 - Korean Hangul syllables (`U+AC00–U+D7A3`)
-- Arabic-specific font, glyph and shaping support has been removed. User-authored TXT bytes are preserved; the other font groups and general UTF-8 handling remain.
+- Imported Arabic uses actual Ghoulam contextual glyphs and lam-alef, RTL runs and display-only harakat filtering. Latin/numbers/punctuation remain SuperFW. Both fields, the editor and Delete preview are supported; no Arabic typing layout was added. Original TXT bytes and logical UTF-8 caret positions are retained. See `docs/arabic.md` and the full-controls manual.
+
+## Local v1.1 input API fix
+
+R-API-1 is fixed: public press/release events and frame snapshots share session edges, so canceled R holds cannot restart Caps, empty snapshots cannot tick Caps, and direct presses retain the 48-elapsed-frame threshold. Controls, field capacities and PDFs are unchanged by this follow-up. No Arabic, indexing or save implementation changes were made.
+
+Historical pre-Arabic Caps-only `gbavocab.gba` SHA256: `2e8884364f93cd6a4abf4ddc024750ac6e32346bbfdad11f757123471fa72ec0`. That inherited Caps-only verification and frozen artifacts are recorded in `input-fix-handoff.md` and `input-fix-freeze.json` in the suite v1.1 evidence directory. The new Arabic candidate has separate `arabic-handoff.md` and immutable manifest evidence; neither candidate is published.
 
 ## Controls
 
@@ -50,7 +56,7 @@ Entry editor:
 - Delete shows both captured fields and **Are you sure?**, initially **No**. Use **Left / Right**, not Up / Down, to select Yes or No; A confirms and B cancels. An empty TXT remains open and can receive new entries.
 - **Autosave OFF is the default on every app start.** This RAM-only toggle survives list/menu changes within the session. OFF confirmed additions, edits and deletions apply to the active in-memory list with zero TXT rewrites until manual saving. Learning **Start** saves all pending entry changes and learning boxes; switching lists also offers Save. ON saves all pending changes plus the next confirmed mutation. Switching ON alone does not flush, and typing never saves. Canceled drafts never mutate data.
 - RAM holds **128 concurrently added/edited rows**. Editing a pending row reuses its slot; deleting consumes none. At capacity, confirmation is rejected with **RAM FULL - save list first** and keeps the draft. Note its text before canceling to learning for manual save, since restarting Add/Edit creates fresh drafts.
-- Typing uses GBAWriter's actual input engine, UTF-8 caret/deletion, visual wrapping and writing font—not an on-screen keyboard. Hold Up/Right/Down/Left for `abc`/`def`/`hij`/`klm`; B/A/R selects the first/second/third letter. Hold L for `nop`/`qrs`/`tuw`/`xyz`. Isolated A inserts space; B deletes; R cycles Shift/Caps. Start+directions moves the caret; Start+L/R moves by a page. Select provides Writer's punctuation/accent cycling; Start+Select toggles its status bar.
+- Typing uses GBAWriter's actual input engine, UTF-8 caret/deletion, visual wrapping and writing font—not an on-screen keyboard. Hold Up/Right/Down/Left for `abc`/`def`/`hij`/`klm`; B/A/R selects the first/second/third letter. Hold L for `nop`/`qrs`/`tuw`/`xyz`. Isolated A inserts space; B deletes; a short isolated R release arms Shift from normal, while an uninterrupted R-only hold enables Caps at 48 frames (about 0.8 seconds). Any companion cancels hold eligibility until a fresh R press. From Shift/Caps, short or long isolated R clears on release and cannot rearm during that hold. Start+directions moves the caret; Start+L/R moves by a page. Select provides Writer's punctuation/accent cycling; Start+Select toggles its status bar.
 - Existing additional columns remain byte-for-byte unchanged during Edit; only the first two fields appear in the drafts. [Reference, controls and persistence details](docs/entry-editor.md).
 - Select can also accent the just-typed letter without inserting another character when its exact producing direction + B/A/R (+ L layer when used) remains continuously held. No timing deadline applies; releasing/changing the chord ends eligibility. See full controls for all accent cycles and case behavior.
 - Fields have 189-byte draft buffers; the confirmed raw row remains limited to **191 UTF-8 bytes including its tab and any additional columns**, and the list to **10,000 entries**. Empty/blank-only fields and newline/tab input are rejected with feedback. A failure retains drafts; a committed-but-failed reopen is reported without offering a duplicate retry.

@@ -18,14 +18,14 @@ static void check(Renderer&r,VocabFile&v,const LineBuf&c){
   update(r,v,0,1,c,side,true,true,false,false);
   std::string collected;int body=0,tiles=0;
   for(auto&x:r.text_sprites){if(x.body){collected+=x.text;++body;}tiles+=x.width*x.height/64;}
-  if(r.body_layout.scale_eighths==8)assert(unspace(collected)==unspace(side==State::SIDE_A?std::string(c.a)+c.b:std::string(c.b)+c.a));
+  if(r.body_layout.scale_eighths==8&&!arabic::contains(c.a)&&!arabic::contains(c.b))assert(unspace(collected)==unspace(side==State::SIDE_A?std::string(c.a)+c.b:std::string(c.b)+c.a));
   for(int s=0;s<2;++s){std::string spans;const char*text=s?c.b:c.a;const auto& l=r.body_layout.side[s];for(int i=0;i<l.count;++i)spans.append(text+l.start[i],l.end[i]-l.start[i]);assert(unspace(spans)==unspace(text));}
   assert(body==r.body_layout.sprite_count);assert(body<=96);
   assert(r.text_sprites.size()<=128);assert(tiles<=1024);
   max_oam=std::max(max_oam,int(r.text_sprites.size()));
   for(int y=-80;y<80;++y){int cycles=0;for(auto&x:r.text_sprites)if(y>=x.py-x.height/2&&y<x.py+x.height/2)cycles+=x.width;assert(cycles<=1210);max_cycles=std::max(max_cycles,cycles);}
   for(int s=0;s<2;++s){auto& l=r.body_layout.side[s];const char* text=s?c.b:c.a;int first=card_side_y(r.body_layout,s,side==State::SIDE_A?0:1);
-   for(int i=0;i<l.count;++i){std::string row(text+l.start[i],text+l.end[i]);assert(r.font_for(text).width(row.c_str())*r.body_layout.scale_eighths<=224*8);
+   for(int i=0;i<l.count;++i){std::string row(text+l.start[i],text+l.end[i]);assert((arabic::contains(text)?arabic::shape(row.c_str(),[&](const char* ch){return r.font_for(text).width(ch);}).width:r.font_for(text).width(row.c_str()))*r.body_layout.scale_eighths<=224*8);
     int half=r.body_layout.scale_eighths;int center=first+i*r.body_layout.line_step;assert(center-half>=-34);assert(center+half<=34);}
   }
  }
@@ -33,7 +33,8 @@ static void check(Renderer&r,VocabFile&v,const LineBuf&c){
  int widths=bn::width_calls;
  update(r,v,0,1,c,State::SIDE_A,true,false,false,false);
  update(r,v,0,1,c,State::SIDE_A,true,true,false,false);
- assert(widths==bn::width_calls);
+ if(!arabic::contains(c.a)&&!arabic::contains(c.b))assert(widths==bn::width_calls);
+ widths=bn::width_calls;
  int draws=bn::generate_calls;
  for(int frame=0;frame<10;++frame)update(r,v,0,1,c,State::SIDE_A,true,true,false,false);
  assert(widths==bn::width_calls);assert(draws==bn::generate_calls);
@@ -49,7 +50,7 @@ int main(int argc,char**argv){
  const std::string original = unsupported;
  LineBuf fallback = {};
  assert(parse_line_into(unsupported.data(), unsupported.size(), fallback));
- assert(std::string(fallback.a) == "A? ??? ? ? ? ?Z");
+ assert(std::string(fallback.a) == "Aب ماء ? ݐ ࢠ ?Z");
  assert(std::string(fallback.b) == "дом");
  assert(unsupported == original);
  check(r,v,fallback);

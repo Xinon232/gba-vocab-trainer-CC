@@ -17,7 +17,7 @@ def arabic(cp):
 
 
 class FontCoverage(unittest.TestCase):
-    def test_sprite_fonts_have_no_arabic_glyphs(self):
+    def test_superfw_sprite_fonts_remain_unchanged_without_arabic(self):
         for path in sorted((ROOT / 'include').glob('*font*.h')):
             text = path.read_text()
             for block in re.findall(r'utf8_characters\[\]\s*=\s*\{(.*?)\};', text, re.S):
@@ -25,7 +25,7 @@ class FontCoverage(unittest.TestCase):
                     for char in json.loads(literal):
                         self.assertFalse(arabic(ord(char)), f'{path.name}: U+{ord(char):04X}')
 
-    def test_no_dedicated_assets_or_generation(self):
+    def test_no_legacy_arabic_sprite_assets(self):
         self.assertFalse(list((ROOT / 'graphics').glob('*arabic*')))
         for path in (ROOT / 'tests').glob('*.py'):
             if path == Path(__file__).resolve():

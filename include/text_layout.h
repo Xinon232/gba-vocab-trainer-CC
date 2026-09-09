@@ -1,5 +1,6 @@
 #pragma once
 #include "vocab.h"
+#include "arabic_text.h"
 
 // Accepted rows contain at most 190 display codepoints across both sides.
 // Even worst-width word wrapping at 224px needs fewer than 32 spans per side.
@@ -75,6 +76,15 @@ bool card_resources(const char* const text[2], Measure measure, CardLayout& layo
     layout.sprite_count = 0;
     for (int side = 0; side < 2; ++side) {
         for (int row = 0; row < layout.side[side].count; ++row) {
+            if (arabic::contains(text[side])) {
+                char line[VOCAB_LINE_MAX];
+                int n=layout.side[side].end[row]-layout.side[side].start[row];
+                std::memcpy(line,text[side]+layout.side[side].start[row],n);line[n]=0;
+                int width=measure(side,line);
+                row_sprites[side][row]=(width*layout.scale_eighths+255)/256;
+                layout.sprite_count+=row_sprites[side][row];
+                continue;
+            }
             int col = 32, row_width = 0;
             for (int p = layout.side[side].start[row]; p < layout.side[side].end[row];) {
                 int end = p + 1;

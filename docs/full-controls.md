@@ -1,4 +1,4 @@
-# gbavocab — full controls
+# gbavocab V1.1 candidate — full controls
 
 Learn vocabulary using flashcards and five learning boxes. Create and edit your own word lists on your Game Boy Advance.
 
@@ -10,7 +10,7 @@ Author: Halim Jarrar
 
 Use a compatible SuperFW / Supercard SD-style setup. Copy the runnable `gbavocab.gba` release ROM to your card and launch it with your firmware. Source builds produce the same `gbavocab.gba` filename. Back up your vocabulary TXT files before using any application that edits them.
 
-The home screen reads `gbavocab V1.0` and `files: /gbavocab`. There is no built-in vocabulary, demo list or automatic fallback. Missing storage is reported; Controls and Credits remain available even without a list.
+The home screen reads `gbavocab V1.1` and `files: /gbavocab`. There is no built-in vocabulary, demo list or automatic fallback. Missing storage is reported; Controls and Credits remain available even without a list.
 
 - Up / Down: choose LOAD LIST or NEW LIST. LOAD LIST is first and selected by default.
 - A: open the selected action.
@@ -120,7 +120,7 @@ A alone inserts a space at the caret. B alone deletes the preceding complete UTF
 
 ### Shift and Caps
 
-An isolated R tap changes case on release: normal → Shift → Caps → normal. Shift uppercases the next accepted letter; Caps stays active. Spaces, digits and punctuation do not consume Shift. Select-first accented letters consume one-shot Shift when the Select session is released. Letter-first conversion retains the original letter's case even after that letter consumed Shift. The ß alternate remains ß even with Shift / Caps. Rejected insertion does not consume Shift. The status line shows the active letter group and Shift or Caps.
+From normal, a short isolated R release arms Shift. Hold R alone for 48 frames (twice the initial A-repeat delay; about 0.8 seconds) to enable Caps while held, once per hold. Any companion before the threshold cancels eligibility until R is released and freshly pressed alone; releasing the companion cannot restart it. From active Shift/Caps, another isolated R—short or long—clears on release and cannot rearm in that hold. Shift uppercases the next accepted letter; Caps stays active. Spaces, digits and punctuation do not consume Shift. Select-first accented letters consume one-shot Shift when the Select session is released. Letter-first conversion retains the original letter's case even after that letter consumed Shift. The ß alternate remains ß even with Shift / Caps. Rejected insertion does not consume Shift. The status line shows the active letter group and Shift or Caps.
 
 ### Caret and visual rows
 
@@ -162,7 +162,7 @@ Start + Select inside a draft toggles the status bar, not the learning Entry edi
 
 While Select is held, typing belongs to the symbol / accent session; do not try to advance a field using Start+A within it. Release Select first, then hold Start and press A. Start+B likewise means previous field / cancel only outside the Select session. A plain B in normal typing is backspace, not cancel.
 
-Typing chords provide Latin letters and the listed accents, not every displayed script. Arabic display support is removed without altering user-authored bytes; see compatibility on page 6.
+Typing chords provide Latin letters and accents, not an Arabic keyboard. For imported Arabic display and caret behavior, see page 7.
 
 <!-- PAGEBREAK -->
 
@@ -188,6 +188,32 @@ No permanent `.sav`, settings or sidecar files. Temporary `name.txt.gbv1.tmp` / 
 
 ### Compatibility and credits
 
-Retained display coverage includes Latin Extended, Greek/Cyrillic, Japanese kana, CJK and Hangul from the existing font packs. Coverage is finite, not every Unicode glyph. Arabic rendering support and bundled demo vocabulary are absent; this does not authorize altering user TXT bytes. dict.cc-style vocabulary interchange is supported, but the website may collapse empty groups and lose empty-box gaps on a round trip.
+Retained display coverage includes Latin Extended, Greek/Cyrillic, Japanese kana, CJK and Hangul from the existing font packs. Coverage is finite, not every Unicode glyph. Ghoulam adds bounded Arabic display (page 7); bundled demo vocabulary remains absent. dict.cc-style vocabulary interchange is supported, but the website may collapse empty groups and lose empty-box gaps on a round trip.
 
 Author: Halim Jarrar. GBAWriter input engine; SuperFW writing fonts by David Guillen Fandos (GPL v3 or later); Butano engine and UI fonts (zlib); dict.cc vocabulary format. Full licenses, credits and technical notes are in the repository.
+
+<!-- PAGEBREAK -->
+
+## 7. Imported Arabic and Ghoulam credits
+
+Arabic may appear in either field, mixed with Latin transliteration, punctuation and numbers. Ghoulam supplies contextual Arabic letter forms and lam-alef ligatures. Logical text wraps first; each resulting line arranges Arabic runs right to left, with Latin and number runs left to right. Paired parentheses, brackets and braces keep enclosed transliteration together within a line. Slash-separated alternatives remain separated.
+
+Harakat are transparent to joining and hidden only in display. The original UTF-8 letters, marks and punctuation remain in the TXT and editor drafts. Ghoulam's empty Arabic-comma glyph displays using the ordinary SuperFW comma instead. Arabic-Indic digits display using SuperFW digits. Other unsupported meaningful characters display a visible question mark. This is bounded Arabic support, not a complete Unicode bidirectional or Arabic-script engine; Persian/Urdu extensions, presentation-form text and explicit bidi embedding controls are not comprehensive coverage.
+
+### Editing imported text
+
+The existing two-field editor and Delete preview use shaped Arabic too. No Arabic keyboard layout has been added. Start + Left / Right still means previous / next logical UTF-8 character, not necessarily left / right on screen. Start + Up / Down chooses a character boundary near the same visual horizontal position in the adjacent wrapped row. A lam-alef ligature has an interior caret position; deleting removes one logical character at a time. Hidden marks keep their logical positions and can require a navigation or deletion step without a visible movement. At a mixed-direction boundary the caret uses the next logical character's leading edge.
+
+The prompt and revealed answer still share a single screen. Short Latin cards retain their previous appearance; long cards may use reduced text. Arabic artwork is rasterized at the font's native 11-pixel scale before any whole-line reduction, retaining its baseline, bearings and connected advances. Reduced text is necessarily small on the GBA screen.
+
+### Ghoulam attribution and extraction notice
+
+Made by Halim Jarrar. (C) 2026. Website: halim-jarrar.de. Contact: monday@halim-jarrar.de. In-app Credits shows these credentials first, with the Arabic font attribution beneath them.
+
+Ghoulam Regular, copyright 2025 Imad AlFil / mloukhiyye, licensed CC BY 4.0. Source: https://mloukhiyye.itch.io/ghoulam-arabic-pixel-art-font-version-1
+
+License: https://creativecommons.org/licenses/by/4.0/
+
+For this app the supplied TTF's actual unencoded GSUB initial, medial, final and lam-alef glyphs were extracted as monochrome ROM bitmap tables at 11 pixels. This conversion, display-only mark filtering and punctuation/digit fallbacks are app changes, not a modified font endorsed by the author. SuperFW remains the font for Latin, numbers and ordinary punctuation. The source font hash and reproducible extractor are included in the local source and evidence.
+
+This is a local V1.1 candidate, not a published release. Test backed-up copies of the supplied lists on your actual SD card and firmware. Emulator/RAM-fixture checks do not verify real Supercard storage or physical-device readability.

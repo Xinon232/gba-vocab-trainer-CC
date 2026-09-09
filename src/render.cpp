@@ -153,7 +153,7 @@ void generate_body(bn::sprite_text_generator& gen, int y, const char* text,
         int length = layout.end[i] - layout.start[i];
         std::memcpy(line, text + layout.start[i], length);
         line[length] = 0;
-        if (scale_eighths == 8) {
+        if (scale_eighths == 8 && !arabic::contains(text)) {
             gen.generate(0, y + i * step, line, sprites);
             continue;
         }
@@ -165,7 +165,18 @@ void generate_body(bn::sprite_text_generator& gen, int y, const char* text,
         const auto& item = font.item();
         int glyph_width = item.shape_size().width();
         int source_x = 0;
-        for (int p = 0; p < length;) {
+        if (arabic::contains(text)) {
+            auto measure=[&](const char* s) { return gen.width(s); };
+            const auto& shaped=arabic::shape(line,measure);
+            source_x=shaped.width;
+            arabic::compose(shaped,scale_eighths,pixels,[&](const arabic::Item& t,int scale,uint32_t* dest) {
+                if(t.code==' ')return;
+                char ch[5];arabic::encode(t.code,ch);bn::utf8_character character(ch);
+                int index=t.code<128?int(t.code)-33:font.utf8_characters_ref().index(character)+94;
+                const auto tiles=item.tiles_item().graphics_tiles_ref(index);
+                paint_body_glyph(reinterpret_cast<const uint32_t*>(tiles.data()),glyph_width,t.advance,t.x,scale,dest);
+            });
+        } else for (int p = 0; p < length;) {
             bn::utf8_character character(line + p);
             int code = character.data();
             int index = code < 128 ? code - 33 :
@@ -431,7 +442,13 @@ void Renderer::render_full(const VocabFile& vf, int current_line_idx, int curren
     if (!field_is_empty && (!body_layout.valid || changed)) {
         bn::sprite_text_generator* fonts[2] = {&font_for(current.a), &font_for(current.b)};
         layout_card(current.a, current.b,
-            [&](int side, const char* s) { return fonts[side]->width(s); }, body_layout);
+            [&](int side, const char* s) {
+                if(arabic::contains(side?current.b:current.a)) {
+                    const auto& shaped=arabic::shape(s,[&](const char* ch){return fonts[side]->width(ch);});
+                    return shaped.valid?shaped.width:100000;
+                }
+                return fonts[side]->width(s);
+            }, body_layout);
 
     }
 

@@ -35,5 +35,25 @@ int main(int argc,char**argv){
  assert(e.text().set_text(std::string(189,'a').c_str()));e.layout().reflow(e.text(),220,width);
  e.frame(1|32);assert(e.message()[0]);render_entry(e,pixels,ui,nullptr);
  for(int y=128;y<144;++y)for(int x=144;x<240;++x)assert(!pixels[y*240+x]);
- puts("PASS production Entry renderer: menu, headings, Writer bitmap glyph and exact caret");
+ // Exact production status pixels after release and held threshold.
+ e.open(-1,nullptr);e.frame(0);e.frame(16);e.frame(0);
+ auto case_pixels=[&](const char* mode){
+   render_entry(e,pixels,ui,nullptr);
+   alignas(2) unsigned char expected[240*160]={};
+   draw_text_idx8_bus16_range(mode,expected+128*240+184,0,48,240,1);
+   for(int y=128;y<144;++y)for(int x=184;x<232;++x)
+     assert(pixels[y*240+x]==expected[y*240+x]);
+ };
+ e.frame(128);case_pixels("");e.frame(0);case_pixels("Shift");
+ for(int i=0;i<100;++i)e.frame(128);
+ case_pixels("Shift");e.frame(0);case_pixels("");
+ for(int i=0;i<48;++i)e.frame(128);
+ case_pixels("");e.frame(128);case_pixels("Caps");
+ e.frame(0);case_pixels("Caps");
+ assert(e.text().set_text(std::string(189,'x').c_str()));
+ e.layout().reflow(e.text(),220,width);
+ e.frame(1|32);e.frame(0);assert(e.input().caps());case_pixels("");
+ e.frame(32);e.frame(0);case_pixels("Caps");
+ e.frame(128);e.frame(0);assert(!e.input().caps());case_pixels("");
+ puts("PASS production Entry renderer: menu, headings, glyphs, caret and solo-R status pixels");
 }

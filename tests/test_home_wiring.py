@@ -8,7 +8,7 @@ assert 'vocab_file_create(' in main
 assert 'vocab_file_next_unused_name(' in home
 assert 'vocab_file_save_installed_index()' in main
 assert 'g_vocab_file = ' not in home
-assert 'gbavocab V1.0' in home
+assert 'gbavocab V1.1' in home
 assert 'files: /gbavocab' in home
 assert 'Select: Controls' in home and 'Start: Credits' in home
 assert 'draw_text_idx8_bus16_range' in home

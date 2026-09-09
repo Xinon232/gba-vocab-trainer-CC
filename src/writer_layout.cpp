@@ -1,4 +1,5 @@
 #include "writer_layout.h"
+#include "text_layout.h"
 #include <cstdlib>
 #include <cstring>
 namespace writer {
@@ -26,6 +27,14 @@ void Layout::reflow(TextModel &text, int w, Width measure) {
   bool line_content = false, suppress = false;
   std::size_t word_end = 0;
   const char *s = text.data();
+  if(arabic::contains(s)) {
+    auto result=layout_text(s,w,[&](const char* part){return arabic::shape(part,measure).width;});
+    if(result.valid&&result.count){
+      _count=result.count;
+      for(int r=1;r<_count;++r)_rows[r]=uint16_t(result.end[r-1])|SUPPRESS;
+    }
+    return;
+  }
   for (std::size_t p = 0; p < text.bytes();) {
     // Look ahead once per word, including oversized words. Whitespace remains
     // in the row index and document; only the display boundary moves.
@@ -101,6 +110,12 @@ VisualPosition Layout::position(TextModel &text, std::size_t byte) const {
   }
   int x = 0;
   const char *s = text.data();
+  if(arabic::contains(s)) {
+    auto start=row_content_start(text,low),end=low+1<_count?row_start(low+1):text.bytes();
+    const auto& line=arabic::shape(s+start,_measure,int(end-start));
+    int offset=byte>start?int(byte-start):0;
+    return {low,arabic::caret_x(line,s+start,offset)};
+  }
   for (std::size_t p = row_content_start(text, low); p < byte;) {
     char ch[5];
     p = character(s, p, ch);
@@ -124,6 +139,17 @@ bool Layout::move(TextModel &text, int delta) {
               end = row + 1 < _count ? row_start(row + 1) : text.bytes();
   int x = 0, distance = std::abs(_desired);
   const char *s = text.data();
+  if(arabic::contains(s)) {
+    auto start=p;const auto& line=arabic::shape(s+start,_measure,int(end-start));
+    distance=100000;
+    for(;;){int d=std::abs(arabic::caret_x(line,s+start,int(p-start))-_desired);
+      if(d<distance){best=p;distance=d;}
+      if(p>=end)break;
+      char ch[5];p=character(s,p,ch);
+      if(p==end&&row+1<_count)break;
+    }
+    text.set_caret(best);return true;
+  }
   for (;;) {
     int d = std::abs(x - _desired);
     if (d < distance) {
