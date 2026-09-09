@@ -314,9 +314,9 @@ void Renderer::update(const VocabFile& vf, int current_line_idx, int current_fie
             flash_timer_frames--;
         }
         if (flash_color == 1) {
-            bn::bg_palettes::set_transparent_color(bn::color(0, 31, 0));  // green
+            bn::bg_palettes::set_transparent_color(bn::color(16, 31, 16));  // green
         } else if (flash_color == 2) {
-            bn::bg_palettes::set_transparent_color(bn::color(31, 0, 0));  // red
+            bn::bg_palettes::set_transparent_color(bn::color(31, 22, 22));  // red
         } else {
             bn::bg_palettes::set_transparent_color(bn::color(BG_R, BG_G, BG_B));
         }
