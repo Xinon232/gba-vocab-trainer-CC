@@ -48,9 +48,10 @@ static void check(bool correct, int held_frames, int box)
         assert(state.feedback_active());
         assert(has_body(renderer,"one") && has_body(renderer,"uno"));
         const auto color=bn::bg_palettes::current;
-        assert(color.r == (correct ? 0 : 31));
-        assert(color.g == (correct ? 31 : 0));
-        assert(color.b == 0);
+        // Preserve the V1.4 pastel feedback palette (production update overrides flash helpers).
+        assert(color.r == (correct ? 16 : 31));
+        assert(color.g == (correct ? 31 : 22));
+        assert(color.b == (correct ? 16 : 22));
     };
     State::InputState in;
     in.a_pressed=in.a_held=correct; in.b_pressed=in.b_held=!correct;

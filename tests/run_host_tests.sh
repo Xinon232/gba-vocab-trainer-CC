@@ -12,7 +12,7 @@ case "${1:-}" in
 esac
 CXX=${CXX:-g++}
 COMMON=(-std=c++17 -O2 -Wall -Wextra -Iinclude src/writer_core.cpp)
-for name in test_entry_shortcuts test_entry_state test_vocab test_vocab_10k test_vocab_grouped test_vocab_file_io_perf test_state test_feedback_hold test_integration test_save_status test_empty_boxes test_scan_limits test_scan_visit test_long_display test_embedded_control test_switch test_page_input test_save_navigation test_text_layout test_body_pixels test_arabic_import test_arabic_text test_arabic_pixels; do
+for name in test_sample_file test_entry_shortcuts test_entry_state test_vocab test_vocab_10k test_vocab_grouped test_vocab_file_io_perf test_state test_feedback_hold test_integration test_save_status test_empty_boxes test_scan_limits test_scan_visit test_long_display test_embedded_control test_switch test_page_input test_save_navigation test_text_layout test_body_pixels test_arabic_import test_arabic_text test_arabic_pixels; do
   if $CORRECTNESS_ONLY && [[ "$name" == test_vocab_file_io_perf ]]; then continue; fi
   "$CXX" "${COMMON[@]}" src/vocab.cpp src/vocab_file_io.cpp src/state.cpp "tests/$name.cpp" -o "$BUILD/$name"
   "$BUILD/$name"
@@ -57,6 +57,9 @@ python3 tests/test_body_column_budget.py
 "$BUILD/arabic_layout"
 "$CXX" "${COMMON[@]}" tests/test_solo_r.cpp -o "$BUILD/solo_r"
 "$BUILD/solo_r"
+"$CXX" "${COMMON[@]}" tests/test_input_layout_v15.cpp -o "$BUILD/input_layout_v15"
+"$BUILD/input_layout_v15"
+python3 tests/test_layout_v15_docs.py
 for name in core frames layout; do
   "$CXX" "${COMMON[@]}" src/writer_layout.cpp "tests/test_writer_$name.cpp" -o "$BUILD/writer_$name"
   "$BUILD/writer_$name"

@@ -12,8 +12,8 @@ constexpr TextPage help[HOME_HELP_PAGES] = {
     {"Entry menu", {"Up/Down: choose; A: open.", "Add, Edit, Delete, Autosave.", "B: return to learning.", "Delete: Left/Right No/Yes;", "A: confirm; B: cancel.", "Add goes first in Box 1."}},
     {"Entry drafts", {"1/2: word; 2/2: translation.", "Start+A: next, then confirm.", "Start+B: previous draft;", "from 1/2: cancel changes.", "Edit keeps box and progress.", "Both fields must have text."}},
     {"Saving entries", {"Autosave OFF each startup.", "OFF: changes stay in RAM.", "Learning Start: save all.", "ON: save confirmed changes.", "No saving each keystroke.", "Save before powering off."}},
-    {"Typing letters", {"Hold a direction, then", "B/A/R: letter 1/2/3.", "Up: abc    Right: def", "Down: hij  Left: klm", "Hold Down, tap R twice: g.", "Keep Down held for both."}},
-    {"Typing / L layer", {"Hold L and a direction:", "Up: nop    Right: qrs", "Down: tuw  Left: xyz", "B/A/R: letter 1/2/3.", "L+Down, tap R twice: v.", "Keep L+Down held for both."}},
+    {"Typing letters", {"Hold a direction, then", "B/A/R: letter 1/2/3.", "Up: abc    Right: hij", "Down: nop  Left: tuw", "Hold Right, tap R twice: g.", "Keep Right held for both."}},
+    {"Typing / L layer", {"Hold L and a direction:", "Up: def    Right: klm", "Down: qrs  Left: xyz", "B/A/R: letter 1/2/3.", "Hold Left, tap R twice: v.", "Keep Left held; no L layer."}},
     {"Spaces / case", {"A alone: space; B: delete.", "Hold alone to repeat A/B.", "Normal: short R release", "arms one-shot Shift.", "Hold R alone 48 frames:", "Caps while held (~0.8 sec)."}},
     {"R hold / chords", {"Any other key cancels hold.", "Release R; start R alone.", "Shift/Caps: isolated R", "clears only on release.", "Short or long; no rearming.", "Shift: next accepted letter."}},
     {"Symbols", {"Select: new period unless", "a producing chord stays held.", "Hold Select to replace it:", "Up/Down: cycle 1234567890.", "Right/Left: .()/;@#%&_+=-", "R/L alone: cycle .,'\":!?"}},
@@ -146,7 +146,7 @@ void home_draw(HomePainter& p,const HomeScreen& h,const VocabFile& vf,const char
         return;
     }
     if(h.page()==Page::home) {
-        p.ui(8,0,"gbavocab V1.4");
+        p.ui(8,0,"gbavocab V1.5");
         p.ui(8,20,"files: /gbavocab");
         p.ui(24,48,h.selection()==0?"> LOAD LIST":"  LOAD LIST");
         p.ui(24,72,h.selection()==1?"> NEW LIST":"  NEW LIST");

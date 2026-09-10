@@ -1,10 +1,10 @@
-# gbavocab V1.3 — full controls
+# gbavocab V1.5 — full controls
 
 Learn vocabulary using flashcards and five learning boxes. Create and edit your own word lists on your Game Boy Advance.
 
 Put UTF-8 TXT vocabulary files in `/gbavocab` at the SD-card root, for example `/gbavocab/Spanish.txt`. Each entry uses a word, a TAB character, and its translation. Optional additional columns are preserved. Files elsewhere on the card are not the list library.
 
-V1.3 shares compact ROM fonts, with gbareader-style composed Korean. Non-Korean pixels, sizing and controls stay unchanged. No SD font files are needed.
+V1.5 matches writer v1.2.0 letter groups and keeps existing fonts, learning and TXT storage. The separate `sample file.txt` has 20 English–Spanish entries, four in each box. Copy it into `/gbavocab`; it is not built into the app.
 
 Author: Halim Jarrar
 
@@ -12,7 +12,7 @@ Author: Halim Jarrar
 
 Use a compatible SuperFW / Supercard SD-style setup. Copy the runnable `gbavocab.gba` release ROM to your card and launch it with your firmware. Source builds produce the same `gbavocab.gba` filename. Back up your vocabulary TXT files before using any application that edits them.
 
-The home screen reads `gbavocab V1.3` and `files: /gbavocab`. There is no built-in vocabulary, demo list or automatic fallback. Missing storage is reported; Controls and Credits remain available even without a list.
+The home screen reads `gbavocab V1.5` and `files: /gbavocab`. There is no built-in vocabulary, demo list or automatic fallback. Missing storage is reported; Controls and Credits remain available even without a list.
 
 - Up / Down: choose LOAD LIST or NEW LIST. LOAD LIST is first and selected by default.
 - A: open the selected action.
@@ -106,15 +106,15 @@ The drafts use GBAWriter's button-driven input engine, not an on-screen keyboard
 ### Letter groups: B / A / R in that order
 
 - Up: a / b / c
-- Right: d / e / f
-- Down: h / i / j
-- Left: k / l / m
-- L + Up: n / o / p
-- L + Right: q / r / s
-- L + Down: t / u / w
+- Right: h / i / j
+- Down: n / o / p
+- Left: t / u / w
+- L + Up: d / e / f
+- L + Right: k / l / m
+- L + Down: q / r / s
 - L + Left: x / y / z
 
-For g: keep Down held and tap R twice. The first tap inserts j; the second replaces it with g. For v: keep L + Down held and tap R twice; w becomes v. This is a continuous-held-group gesture, not a fast double-tap deadline. Releasing the direction or L resets the sequence; A, B, Start or Select also interrupts it. The replacement keeps the case of the first letter.
+For g: keep Right held and tap R twice. The first tap inserts j; the second replaces it with g. For v: keep Left held and tap R twice; w becomes v. This is a continuous-held-group gesture, not a fast double-tap deadline. Releasing the direction or L resets the sequence; A, B, Start or Select also interrupts it. The replacement keeps the case of the first letter.
 
 ### Spaces, deletion and repeat
 

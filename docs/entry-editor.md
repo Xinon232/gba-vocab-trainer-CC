@@ -18,9 +18,9 @@ Learning Start+Select opens the editor in either press order and consumes releas
 
 Hold a D-pad group and press B / A / R for its first / second / third letter:
 
-- Up: abc; Right: def; Down: hij; Left: klm.
-- Hold L for the second layer: Up nop; Right qrs; Down tuw; Left xyz.
-- Keep Down held and press R twice for g; L+Down with R twice gives v.
+- Up: abc; Right: hij; Down: nop; Left: tuw.
+- Hold L for the second layer: Up def; Right klm; Down qrs; Left xyz.
+- Keep Right held and press R twice for g; keep Left held and press R twice for v. No L layer or timing deadline applies.
 - A alone inserts space; B alone deletes the previous UTF-8 character; both retain Writer's held-repeat schedule.
 - From normal, short isolated R release arms Shift; an uninterrupted R-only hold enables Caps at 48 frames (about 0.8 seconds), while held once. Any companion cancels eligibility until R is released and freshly pressed alone; releasing the companion cannot restart it. From active Shift/Caps, isolated R clears on release, short or long, and cannot rearm during the same hold. Shift applies to the next accepted letter, including accents; spaces and punctuation retain it. The ß alternate has no uppercase substitution.
 - Start+Left/Right moves a character; Start+Up/Down moves visual rows; Start+L/R moves pages.
@@ -54,7 +54,7 @@ Keep backups; do not remove power/card while saving or externally edit/swap a lo
 
 For an immediate ON mutation on a clean list, a sequential physical splice preserves unrelated bytes, existing separators, mixed LF/CRLF, whitespace and an unterminated EOF. Add uses the first observed newline convention, or CRLF for a file without a newline. If entry changes or learning progress/reordering are pending, saving uses the inherited grouped CRLF serializer; its box-separator normalization still applies. Manual learning save flushes all changes with the five learning boxes. No new columns, comments, metadata, permanent `.sav`, settings or sidecar files are written.
 
-No built-in/demo vocabulary ships. Arabic-specific shaping/font/glyph support is removed while preserving user-authored bytes and other supported scripts. General UTF-8 handling remains; retained font coverage is finite. Developer fixtures are not a user-facing fallback.
+No built-in/demo vocabulary ships. The standalone `sample file.txt` is optional SD-card content. Existing Arabic shaping and Ghoulam artwork remain; no Arabic typing layout is added. General UTF-8 handling and all other fonts remain unchanged.
 
 ## Verification commands
 
