@@ -1,0 +1,24 @@
+hello	hola
+goodbye	adiós
+please	por favor
+thank you	gracias
+
+yes	sí
+no	no
+house	casa
+door	puerta
+
+window	ventana
+water	agua
+bread	pan
+apple	manzana
+
+cat	gato
+dog	perro
+book	libro
+to read	leer
+
+to write	escribir
+to learn	aprender
+big	grande
+small	pequeño
