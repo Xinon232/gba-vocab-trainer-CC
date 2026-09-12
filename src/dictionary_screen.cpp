@@ -1,5 +1,6 @@
 #include "dictionary_screen.h"
 #include "dictionary.h"
+#include "dictionary_handle.h"
 #include "dictionary_search.h"
 #include "entry_editor.h"
 #include "entry_screen.h"
@@ -54,7 +55,7 @@ bool add_to_dictionary(Canvas& p,Dictionary d){
   if(add_editor.commit_requested()){
    p.clear();p.ui(8,64,"SAVING DICTIONARY");p.flip();
    bool saved=additions.append(add_editor.row());add_editor.finish(saved,additions.error());
-   if(saved){notice(p,"Entry saved to dictionary.","Stored in its SD .sav file.");return true;}
+   if(saved){notice(p,"Entry saved to dictionary.","Stored in its .dict file.");return true;}
   }
   p.clear();
   render_entry(add_editor,p.pixels,[](void* ctx,int x,int y,const char* text){
@@ -76,12 +77,13 @@ bool run_dictionary_screen(Renderer& renderer,VocabFile* target,DictionaryResult
  char visible_rows[2][2][192];
  const PairMetadata* filter=target?&target->languages:nullptr;
  renderer.reset();bn::core::update();bn::core::update();
- auto catalog=dictionary_rom();int eligible[16],count=0;
- for(int i=0;i<catalog.count();++i)if(!filter||!filter->present()||catalog.match(i,filter->front,filter->back)>=0)eligible[count++]=i;
+ DictionaryCatalog catalog(vocab_file_sd_ready(),vocab_file_dictionary_fil(),vocab_file_dictionary_opened());int eligible[DictionaryCatalog::CAPACITY],count=0;
+ for(int i=0;i<catalog.count();++i)if(catalog.dictionary(i).valid()&&(!filter||!filter->present()||catalog.match(i,filter->front,filter->back)>=0))eligible[count++]=i;
  bool picked=false;
  {
   Canvas p;
-  if(!count)notice(p,catalog.count()?"No dictionary for this list pair.":"No dictionaries in this ROM.",catalog.count()?"Use the PC builder to add it.":"Build one with the PC builder.");
+  if(target&&target->pair_blocked)notice(p,"List metadata needs repair.","Back up TXT/SAV; repair on PC.");
+  else if(!count)notice(p,catalog.count()?"No dictionary for this list pair.":"No valid .dict in /gbavocab.",catalog.count()?"Use the PC builder to add it.":"Copy .dict from the PC builder.");
   else {
    int choice=0,side=0;bool chooser=count>1,done=false,wait=true;
    int chooser_origin=-1;
@@ -174,7 +176,7 @@ bool run_dictionary_screen(Renderer& renderer,VocabFile* target,DictionaryResult
      }
      p.body(144,128,query.input().active_group(),32);
      if(query.input().caps())p.body(184,128,"Caps",48);else if(query.input().shift_armed())p.body(184,128,"Shift",48);
-     if(additions.error()[0])p.ui(8,144,"SAV unavailable; ROM only");
+     if(additions.error()[0]||search.failed())p.ui(8,144,"Dictionary I/O or format error");
      else p.ui(8,144,target?"Start+A: Add   Start+B: Back":"Start+Select: New entry");
     }
     p.flip();
@@ -186,6 +188,7 @@ bool run_dictionary_screen(Renderer& renderer,VocabFile* target,DictionaryResult
 }
 
 bool dictionary_accept_pair(Renderer& renderer,VocabFile& vf,DictionaryResult& result) {
+ if(vf.pair_blocked)return false;
  bool swap=false,accepted=false;
  if(vf.languages.present()) {
   if(vf.languages.same(result.languages))return true;

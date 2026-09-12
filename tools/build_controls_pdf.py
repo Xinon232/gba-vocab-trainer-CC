@@ -86,7 +86,7 @@ def build(source: Path, output: Path, qa: Path | None) -> dict:
             story.append(Paragraph(inline(block.replace('\n', ' ')), styles['body']))
     output.parent.mkdir(parents=True, exist_ok=True)
     doc = SimpleDocTemplate(str(output), pagesize=A4, rightMargin=42, leftMargin=42,
-                            topMargin=35, bottomMargin=38, title='gbavocab V1.6 — Full controls',
+                            topMargin=35, bottomMargin=38, title='gbavocab v1.6.0-pre.1 — Full controls',
                             author='Halim Jarrar', subject='Complete current controls, typing and TXT persistence')
 
     def footer(canvas, document):
@@ -95,7 +95,7 @@ def build(source: Path, output: Path, qa: Path | None) -> dict:
         canvas.line(42, 29, A4[0]-42, 29)
         canvas.setFont('Body', 8)
         canvas.setFillColor(colors.HexColor('#4d6475'))
-        canvas.drawString(42, 17, 'gbavocab V1.6  |  Halim Jarrar')
+        canvas.drawString(42, 17, 'gbavocab v1.6.0-pre.1  |  Halim Jarrar')
         canvas.drawRightString(A4[0]-42, 17, str(document.page))
         canvas.restoreState()
 

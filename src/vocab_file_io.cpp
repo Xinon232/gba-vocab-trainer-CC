@@ -261,6 +261,8 @@ static FIL* s_loaded_source = &s_source_pool[0];
 static FIL* s_candidate_source = &s_source_pool[1];
 static bool s_loaded_source_open = false;
 static bool s_candidate_source_open = false;
+FIL& vocab_file_dictionary_fil(){return *s_candidate_source;}
+bool& vocab_file_dictionary_opened(){return s_candidate_source_open;}
 // Save-only reindex scratch: bounded metadata (offsets/fields/dirty/counts), not
 // vocabulary text. Keeping it static places it in normal EWRAM/BSS rather than
 // on the small GBA stack and preserves the live dirty state if reindex fails.
@@ -1217,6 +1219,7 @@ static bool write_entry_splice(FIL& in, FatFsBufferedWriter& writer)
                           (!add || writer.append(newline,newline_length)));
     };
     while(source.next(c,offset)) {
+        if(offset>=s_entry_plan.legacy_pair_start&&offset<s_entry_plan.legacy_pair_end)continue;
         if (!inserted && offset == s_entry_start) {
             if (!insert()) return false;
             skipping = !add;
@@ -1233,7 +1236,10 @@ static bool write_entry_splice(FIL& in, FatFsBufferedWriter& writer)
     if (source.failed() || source.identity().size != f_size(&in)) return false;
     if (!inserted && !insert()) return false; // add to an empty physical file
     if (!add && !ended) end = f_size(&in);
-    const uint32_t delta = writer.position() - uint32_t(f_size(&in));
+    // The terminal footer follows every vocabulary row: its removal must not
+    // shift retained row offsets that precede it.
+    const uint32_t delta = writer.position() - uint32_t(f_size(&in)) +
+        s_entry_plan.legacy_pair_end-s_entry_plan.legacy_pair_start;
     s_reindex_scratch = s_entry_plan;
     for(int i=0;i<s_reindex_scratch.line_count;++i) {
         uint32_t old = s_reindex_scratch.line_offsets[i];
@@ -1241,6 +1247,7 @@ static bool write_entry_splice(FIL& in, FatFsBufferedWriter& writer)
             old >= end ? old + delta : old;
     }
     s_reindex_scratch.loaded = true;
+    s_reindex_scratch.legacy_pair_start=s_reindex_scratch.legacy_pair_end=0;
     vocab_clear_dirty(s_reindex_scratch);
     return true;
 }
@@ -1564,6 +1571,15 @@ bool vocab_file_save_grouped(VocabFile& vf, const char* fallback_buf, int fallba
     return true;
 }
 
+#if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
+static Presence metadata_reservation(const char* name)
+{
+    char path[84];std::strcpy(path,name);std::strcpy(path+std::strlen(path)-4,".sav");
+    Presence canonical=probe_path(path);std::strcat(path,".tmp");Presence temporary=probe_path(path);
+    if(canonical==Presence::error||temporary==Presence::error)return Presence::error;
+    return canonical==Presence::present||temporary==Presence::present?Presence::present:Presence::missing;
+}
+#endif
 bool vocab_file_next_unused_name(char out[VOCAB_FILENAME_MAX])
 {
     out[0] = 0;
@@ -1579,7 +1595,9 @@ bool vocab_file_next_unused_name(char out[VOCAB_FILENAME_MAX])
         if (found == Presence::missing) {
             // An interrupted transaction may own a temporarily absent name.
             // Never create over that recovery namespace.
-            bool reserved = false;
+            Presence metadata=metadata_reservation(name);
+            if(metadata==Presence::error){s_last_error="SD I/O ERROR";return false;}
+            bool reserved = metadata==Presence::present;
             for (int slot = 1; slot <= 9; ++slot) {
                 char transaction[VOCAB_FILENAME_MAX];
                 make_sidecar_name(name, ".txn", transaction, slot);
@@ -1605,6 +1623,7 @@ bool vocab_file_create(const char* filename, VocabFile& vf)
     if (!filename || !has_txt_ext(filename) || std::strchr(filename, '/') ||
         std::strchr(filename, '\\') || std::strchr(filename, ':') ||
         std::strlen(filename) > 54) { s_last_error = "INVALID FILENAME"; return false; }
+    if(metadata_reservation(filename)!=Presence::missing){s_last_error="METADATA NAME - not created";return false;}
     for (int slot = 1; slot <= 9; ++slot) {
         char transaction[VOCAB_FILENAME_MAX];
         make_sidecar_name(filename, ".txn", transaction, slot);
@@ -1715,6 +1734,9 @@ bool vocab_file_mutate(VocabFile& vf, EntryMutation operation, int target,
          !writer::valid_utf8(raw_row,std::strlen(raw_row)))) {
         s_last_error = "INVALID ENTRY / 191 bytes max"; return false;
     }
+    if(vf.pair_blocked){s_last_error="LIST PAIR: RELOAD / REPAIR";return false;}
+    ListPairStorage pairs(*s_candidate_source,s_candidate_source_open);
+    if(vf.languages.present()&&!pairs.save(s_loaded_name,vf.languages)){s_last_error="LIST PAIR SAVE FAILED";return false;}
     s_entry_plan = vf;
     int committed_index = 0;
     if (operation == EntryMutation::add) {

@@ -8,7 +8,7 @@ assert 'vocab_file_create(' in main
 assert 'vocab_file_next_unused_name(' in home
 assert 'vocab_file_save_installed_index()' in main
 assert 'g_vocab_file = ' not in home
-assert 'gbavocab V1.6' in home
+assert 'gbavocab v1.6.0-pre.1' in home
 assert 'Hold A/B: keep both cards.' in home
 assert 'Release: 24 frames more.' in home
 assert 'Same green/red background.' in home

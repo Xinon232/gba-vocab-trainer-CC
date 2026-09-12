@@ -4,7 +4,7 @@ Learn vocabulary with flashcards and create your own word lists on your Game Boy
 
 Use five learning boxes to practise vocabulary, and add, edit or delete entries on the console. Put UTF-8 `.txt` vocabulary lists in `/gbavocab` at the SD-card root (for example `/gbavocab/Spanish.txt`), then choose **LOAD LIST**. Choose **NEW LIST** to create an empty list on the SD card.
 
-The app is built with Butano and targets SuperFW / Supercard SD-style setups. TXT files are compatible with dict.cc-style vocab-trainer exports. The home screen reads `gbavocab V1.6`. V1.2 retains both cards and the existing green/red feedback while A/B is held, then for 24 frames after release (about 0.4 seconds, matching GBAWriter's initial solo-A repeat delay). Holding does not consume this delay. Grading remains on press; only advancement waits longer.
+The app is built with Butano and targets SuperFW / Supercard SD-style setups. TXT files are compatible with dict.cc-style vocab-trainer exports. The home screen reads `gbavocab v1.6.0-pre.1`. V1.2 retains both cards and the existing green/red feedback while A/B is held, then for 24 frames after release (about 0.4 seconds, matching GBAWriter's initial solo-A repeat delay). Holding does not consume this delay. Grading remains on press; only advancement waits longer.
 
 Each vocabulary file can contain up to 10,000 entries. The text is streamed from the SD card, so smaller files retain their normal per-file loading, saving, and training performance.
 
@@ -17,19 +17,32 @@ Current flashcard text support uses SuperFW-derived fonts for broad language com
 - Korean Hangul syllables (`U+AC00–U+D7A3`)
 - Imported Arabic uses actual Ghoulam contextual glyphs and lam-alef, RTL runs and display-only harakat filtering. Latin/numbers/punctuation remain SuperFW. Both fields, the editor and Delete preview are supported; no Arabic typing layout was added. Original TXT bytes and logical UTF-8 caret positions are retained. See `docs/arabic.md` and the full-controls manual.
 
-## V1.6 local dictionaries and PC builder
+## v1.6.0-pre.1 external dictionaries and PC builder
 
-Build a standalone ROM with your own UTF-8 dict.cc-style exports using the graphical Windows executable or Linux builder. No GBA compiler is required by end users. Extract the whole ZIP and launch `gbavocab-builder.exe` (Windows) or `gbavocab-builder` (Linux). Add exports, give each dictionary a name and language codes/labels, then choose the output `.gba`. No copyrighted dictionary is bundled.
+Use one normal `gbavocab.gba` with standalone custom `.dict` files. The graphical Windows executable and Linux builder import your own legally obtained UTF-8 TAB-separated exports and build both directional indexes. No compiler or ROM template is required. Extract the whole package and launch `gbavocab-builder.exe` (Windows) or `gbavocab-builder` (Linux); import an export, enter its name/language pair, and Save .dict as. Open .dict reads the base and GBA additions; Save As compacts them into a new indexed file without changing the original. No copyrighted dictionary is bundled.
 
-The PC builds both directional indexes; dictionary text and indexes remain in ROM. Capacity tests use 40,010 synthetic entries, separately from the 10,000-entry learning-list limit. The builder enforces the 32 MiB ROM ceiling and 191-byte editable-pair limit. Search is live ASCII-case-insensitive prefix matching; other Unicode characters match exactly. Up to 16 dictionaries can be packaged.
+Put everything directly in the SD-root `/gbavocab` folder, with no subdirectories:
 
-In lookup, hold **Start+Up/Down** to browse results, **Start+A** to select, **Start+L** to change direction and **Start+R** to choose a dictionary. **Start+Left/Right** retains the typing caret; release Start to type. **Start+B** cancels. Home lookup chooses a destination TXT after selecting a result, using the existing dirty-list Save/Discard/Cancel guard. Entry-menu lookup adds to the active list. One matching dictionary opens directly; multiple matching dictionaries show a chooser.
+```
+/gbavocab/English-German.dict
+/gbavocab/French-German.dict
+/gbavocab/Spanish.txt
+/gbavocab/Spanish.sav
+/gbavocab/Travel.txt
+/gbavocab/Travel.sav
+```
 
-The optional final TXT footer `# gbavocab: front=en; back=de` identifies list columns independently of ROM dictionary IDs. First use asks for the pair; it stays in RAM until manual save. Remove that line on PC to reset the pair. Older versions may regard it as a rejected row. Full grammar and complete controls: [manual](docs/full-controls.md).
+LOAD LIST discovers only TXT. LOCAL DICTIONARY discovers up to 24 `.dict` filenames by extension and displays their internal names/pairs. Each base is limited to 32 MiB and pairs to 191 UTF-8 bytes including TAB; the dictionary is independent of the 10,000-entry learning-list limit. Tests use 40,010 synthetic base entries. A 256-byte read cache and PC-built indexes support logarithmic base prefix lookup in either direction, without loading or scanning the entire base per query. A bounded scan searches up to 512 addition slots on query changes, not every frame. ASCII case is ignored; other Unicode matches exactly.
 
-**Add your own dictionary words on the GBA:** open a dictionary from the main menu, then press **Start+Select**. Enter the two displayed languages using the normal two-step editor; **Start+A** advances and then saves. **Start+B** goes back or cancels. This shortcut is disabled in Add from dictionary. New words persist immediately in a checksummed, per-dictionary `.sav` under `/gbavocab/dictionaries`, not in cartridge SRAM or learning TXT files. Both lookup routes search these additions before ROM matches. Up to 512 additions per dictionary are supported; retain the dictionary's name and ordered language codes when rebuilding its ROM. See manual section 10 for errors, backups and interrupted-save precautions.
+Hold **Start+Up/Down** to browse, **Start+A** to select, **Start+L** to change direction, **Start+R** for the chooser, **Start+Left/Right** for the caret, and **Start+B** to cancel. Home lookup chooses a destination TXT through the existing Save/Discard/Cancel guard. Add from dictionary prefills a new draft in the current list. Canonical list columns do not change with search direction.
 
-Developer checks: `bash tests/run_dictionary_tests.sh`; `python3 tests/test_builder_app.py` after a ROM build; `python3 builder/app.py --template gbavocab.gba`. Packaged builds use `builder/package.py` and the branch-scoped dictionary-builder Actions workflow. No workflow publishes releases.
+List language codes live in matching-basename `.sav`, not TXT: `Spanish.txt` uses `Spanish.sav`. Words and learning progress remain in TXT. First use without metadata asks for the pair; manual save persists it. Copy/rename the pair together. Valid legacy `# gbavocab: front=en; back=de` footers migrate only after matching SAV write, sync and readback verification. Corrupt/conflicting metadata blocks saving. Orphan SAV and SAV.tmp names are reserved when creating new lists; neither is silently adopted or deleted. See [metadata format](docs/list-metadata-format.md).
+
+**Add dictionary words:** open a dictionary from the main menu and press **Start+Select** (disabled in Add from dictionary). Enter the displayed canonical languages; **Start+A** advances then saves immediately to the same .dict file. **Start+B** goes back/cancels. Checksummed, two-phase committed append slots leave the base and previous slots unchanged; incomplete tails consume a slot and are skipped on retry. Exact duplicate addition retries do not append twice. At 512 physical slots, compact with PC Open .dict / Save As. Back up before replacing files. Unpublished legacy dictionary `.sav` files are unsupported and never automatically removed; keep copies for manual recovery.
+
+This custom format is **not StarDict or standard .dict compatibility**. See the exact [versioned format, CRC rules and limits](docs/dictionary-format.md). Host-backed production FatFS API fault tests are not physical flashcard certification. Do not remove power/card during saves or edit/swap an open file externally.
+
+Developer checks: `bash tests/run_dictionary_tests.sh`, optionally `--sanitize`; `python3 builder/app.py` starts the GUI. Native packaging is `python3 builder/package.py`; the branch-scoped workflow tests actual Windows/Linux executables. No workflow publishes a release.
 
 ## V1.5 input layout
 
@@ -76,7 +89,7 @@ Entry editor:
 - Existing additional columns remain byte-for-byte unchanged during Edit; only the first two fields appear in the drafts. [Reference, controls and persistence details](docs/entry-editor.md).
 - Select can also accent the just-typed letter without inserting another character when its exact producing direction + B/A/R (+ L layer when used) remains continuously held. No timing deadline applies; releasing/changing the chord ends eligibility. See full controls for all accent cycles and case behavior.
 - Fields have 189-byte draft buffers; the confirmed raw row remains limited to **191 UTF-8 bytes including its tab and any additional columns**, and the list to **10,000 entries**. Empty/blank-only fields and newline/tab input are rejected with feedback. A failure retains drafts; a committed-but-failed reopen is reported without offering a duplicate retry.
-- Persisted mutations use the existing validated TXT replacement/recovery transaction. Manual saves use the existing grouped CRLF save format. No permanent `.sav`, settings file or sidecar is introduced; transient recovery files are retained when failure requires them. Load or create an SD-backed TXT before opening the editor; there is no demo-list drafting fallback.
+- Persisted mutations use the existing validated TXT replacement/recovery transaction. Manual saves use the existing grouped CRLF save format. Matching-basename `.sav` stores only the list language pair; transient recovery files are retained when failure requires them. Load or create an SD-backed TXT before opening the editor; there is no demo-list drafting fallback.
 
 File browser:
 
@@ -95,7 +108,7 @@ Hund	dog
 дом	house
 ```
 
-The importer keeps all five box positions when reopening its own TXT files, including empty first and middle boxes. Exactly one empty physical line separates each pair of boxes (four separators total); vocabulary row bytes are retained and saved with CRLF endings. An optional final `# gbavocab: front=en; back=de` line stores the list language pair; it is not an entry or box separator. No persistent `.sav` files are used. Existing additional columns are preserved verbatim.
+The importer keeps all five box positions when reopening its own TXT files, including empty first and middle boxes. Exactly one empty physical line separates each pair of boxes (four separators total); vocabulary row bytes are retained and saved with CRLF endings. The language pair is stored in matching-basename `.sav`, after safe migration of any valid legacy footer. Existing additional columns are preserved verbatim.
 
 The first two tab-separated fields must be nonempty; existing additional columns are retained outside the editable fields. The entire raw row, including any additional columns, is limited to 191 content bytes. Invalid/overlong rows and entries beyond 10,000 make the loaded source **read-only**, with a visible warning, rather than allowing a save to drop unseen material. Long display text wraps at codepoint boundaries using the selected font's pixel measurements. Both sides fit on one screen, with body-only size reduction when needed (down to half size for extreme entries). Short cards retain their original typography and positions. Both sides are measured together, so revealing the answer never resizes the prompt. TXT content is never shortened to fit the display.
 

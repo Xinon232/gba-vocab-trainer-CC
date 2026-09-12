@@ -3,7 +3,7 @@ r=Path(__file__).resolve().parents[1]
 screen=r/'src/dictionary_screen.cpp'
 assert screen.exists(), 'dictionary screen not implemented'
 s=screen.read_text()
-assert 'dictionary_rom()' in s and 'DictionarySearch' in s and 'query.frame(' in s
+assert 'DictionaryCatalog catalog(vocab_file_sd_ready(),vocab_file_dictionary_fil(),vocab_file_dictionary_opened())' in s and 'DictionarySearch' in s and 'query.frame(' in s
 assert '.prefix(' in (r/'include/dictionary_search.h').read_text()
 assert 'vocab_file_mutate' not in s and 'vocab_file_save' not in s
 entry=(r/'src/entry_screen.cpp').read_text()

@@ -3,7 +3,7 @@
 namespace {
 struct TextPage { const char* heading; const char* lines[6]; };
 constexpr TextPage help[HOME_HELP_PAGES] = {
-    {"About / files", {"Learn vocabulary with", "flashcards and five boxes.", "Create and edit word lists.", "Put UTF-8 TXT lists in", "/gbavocab on the SD card.", "Rows: word TAB translation."}},
+    {"About / files", {"Learn vocabulary with", "flashcards and five boxes.", "Create and edit word lists.", "TXT lists and .dict files in", "/gbavocab on the SD card.", "Rows: word TAB translation."}},
     {"Home / lists", {"Up/Down: choose; A: open.", "LOAD LIST is the default.", "NEW LIST: unused TXT name.", "A: create shown name.", "B: back; home B: resume.", "No card: no demo list."}},
     {"Browsing / switching", {"Up/Down: select a file.", "Left/Right: jump 5 files.", "A: load; B: return home.", "Dirty list: A Save,", "B Discard, Select Cancel.", "Failure keeps active list."}},
     {"Learning", {"Hold R: reveal answer.", "A: correct, next box.", "B: wrong, back to Box 1.", "Hold A/B: keep feedback.", "Left/Right: boxes 1-5.", "Up: undo in the same box."}},
@@ -11,7 +11,7 @@ constexpr TextPage help[HOME_HELP_PAGES] = {
     {"Learning / shortcuts", {"Down: shuffle current box.", "Then A: yes; B: cancel.", "L: front, back, alternating.", "Start alone: save on release.", "Select alone: home on release.", "Start+Select: Entry editor."}},
     {"Entry menu", {"Up/Down: choose; A: open.", "Add, Edit, Delete entries.", "B: return to learning.", "Delete: Left/Right No/Yes;", "A: confirm; B: cancel.", "Add goes first in Box 1."}},
     {"Entry drafts", {"1/2: word; 2/2: translation.", "Start+A: next, then confirm.", "Start+B: previous draft;", "from 1/2: cancel changes.", "Edit keeps box and progress.", "Both fields must have text."}},
-    {"Saving entries", {"Manual save; no autosave.", "Changes stay in RAM.", "Learning Start: save all.", "Pair footer saved with list.", "No saving each keystroke.", "Save before powering off."}},
+    {"Saving entries", {"Manual save; no autosave.", "Changes stay in RAM.", "Learning Start: save all.", "List pair saved in .sav.", "No saving each keystroke.", "Save before powering off."}},
     {"Typing letters", {"Hold a direction, then", "B/A/R: letter 1/2/3.", "Up: abc    Right: hij", "Down: nop  Left: tuw", "Hold Right, tap R twice: g.", "Keep Right held for both."}},
     {"Typing / L layer", {"Hold L and a direction:", "Up: def    Right: klm", "Down: qrs  Left: xyz", "B/A/R: letter 1/2/3.", "Hold Left, tap R twice: v.", "Keep Left held; no L layer."}},
     {"Spaces / case", {"A alone: space; B: delete.", "Hold alone to repeat A/B.", "Normal: short R release", "arms one-shot Shift.", "Hold R alone 48 frames:", "Caps while held (~0.8 sec)."}},
@@ -25,14 +25,14 @@ constexpr TextPage help[HOME_HELP_PAGES] = {
     {"Typing / limits", {"Start+Select: toggle status.", "Start alone: no newline.", "No tabs or newlines in fields.", "191 UTF-8 bytes per row", "including tab / extra columns.", "10,000 entries per list."}},
     {"Imported Arabic", {"Ghoulam contextual letters.", "Arabic runs read right to left.", "Latin and digits stay LTR.", "Harakat hidden, bytes kept.", "Arabic comma displays as ,", "Missing artwork displays ?."}},
     {"Arabic / editing", {"Import Arabic in either field.", "No Arabic typing layout.", "Caret uses logical UTF-8.", "Left/Right: previous/next", "character, not visual order.", "Rows and caret are shaped."}},
-    {"Local dictionary", {"Home: LOCAL DICTIONARY.", "ROM dictionaries need no SD.", "Build ROM with PC builder.", "Windows EXE or Linux app.", "Use your own UTF-8 exports.", "40,000+ entries supported."}},
+    {"Local dictionary", {"Home: LOCAL DICTIONARY.", "SD .dict files in /gbavocab.", "Build .dict with PC builder.", "Windows EXE or Linux app.", "Use your own UTF-8 exports.", "40,000+ entries supported."}},
     {"Dictionary / search", {"Type to see prefix matches.", "Hold Start+Up/Down: results.", "Start+A: select a pair.", "Start+B: return / cancel.", "Release Start: keep typing.", "Start+Left/Right: caret."}},
     {"Dictionary / direction", {"Start+L: search direction.", "Start+R: dictionary chooser.", "One dictionary: opens direct.", "Up/Down, A: choose; B: back.", "ASCII case is ignored.", "Other Unicode matches exactly."}},
     {"Dictionary / add", {"Add from dictionary", "prefills a NEW entry draft.", "Edit either field, then apply.", "Home lookup: choose TXT next.", "Dirty list: Save/Discard/Cancel.", "Manual save persists changes."}},
-    {"Dictionary / list pair", {"First use: choose list pair.", "Left/Right: swap; A: accept.", "Pair stays in RAM until save.", "TXT footer stores front/back.", "Only matching pairs are shown.", "Remove footer on PC to reset."}},
+    {"Dictionary / list pair", {"First use: choose list pair.", "Left/Right: swap; A: accept.", "Pair stays in RAM until save.", ".sav stores front/back.", "Only matching pairs are shown.", "Back up .sav before resetting."}},
     {"Dictionary / new word", {"Open dictionary from home.", "Start+Select: add new entry.", "Not in Add from dictionary.", "Enter shown first language.", "Start+A: next, then save.", "Start+B: back / cancel."}},
-    {"Dictionary / SD save", {"New entries need a writable SD.", "One .sav for each dictionary.", "Folder: /gbavocab/dictionaries", "512 added entries per dictionary.", "Saved matches precede ROM ones.", "Both lookup routes use them."}},
-    {"Dictionary / save safety", {"This is not cartridge SRAM.", "ROM and learning TXT unchanged.", "Keep dictionary name and codes", "when rebuilding its ROM.", "Failure keeps the draft.", "Recovery warning: back up on PC."}}
+    {"Dictionary / SD save", {"New entries need a writable SD.", "New words in the same .dict.", "Folder: /gbavocab", "512 addition slots per file.", "Added matches precede base ones.", "Both lookup routes use them."}},
+    {"Dictionary / save safety", {"This is not cartridge SRAM.", "Base and learning TXT unchanged.", "Use PC Save As to compact", "into a new indexed .dict.", "Failure keeps the draft.", "Recovery warning: back up on PC."}}
 };
 constexpr TextPage credits[HOME_CREDIT_PAGES] = {
     {"Credits / author", {"Made by Halim Jarrar", "(C) 2026", "halim-jarrar.de", "monday@halim-jarrar.de", "", ""}},
@@ -158,7 +158,7 @@ void home_draw(HomePainter& p,const HomeScreen& h,const VocabFile& vf,const char
         return;
     }
     if(h.page()==Page::home) {
-        p.ui(8,0,"gbavocab V1.6");
+        p.ui(8,0,"gbavocab v1.6.0-pre.1");
         p.ui(8,20,"files: /gbavocab");
         p.ui(24,48,h.selection()==0?"> LOAD LIST":"  LOAD LIST");
         p.ui(24,72,h.selection()==1?"> NEW LIST":"  NEW LIST");

@@ -1,4 +1,4 @@
-name: V1.6 dictionary builder verification
+name: v1.6.0-pre.1 external dictionary verification
 on:
   push:
     branches: [feature/v1.6-dictionary]
@@ -15,6 +15,7 @@ jobs:
           python-version: '3.11'
       - run: python -m pip install Pillow==12.3.0
       - run: bash tests/run_host_tests.sh --correctness-only
+      - run: bash tests/run_dictionary_tests.sh --sanitize
   rom:
     runs-on: ubuntu-24.04
     container: devkitpro/devkitarm:20260610
@@ -25,20 +26,21 @@ jobs:
           repository: GValiente/butano
           ref: 77dcbcb3d8783596a9f333c64eedbccec77b05dc
           path: _butano
-      - name: Build template from this source revision
+      - name: Build normal ROM from this source revision
         env:
           DEVKITPRO: /opt/devkitpro
           DEVKITARM: /opt/devkitpro/devkitARM
-        run: make -j2 LIBBUTANO="$GITHUB_WORKSPACE/_butano/butano"
+        run: |
+          make -j2 LIBBUTANO="$GITHUB_WORKSPACE/_butano/butano"
+          python3 tests/check_entry_memory.py
       - uses: actions/upload-artifact@v4
         with:
-          name: dictionary-template
+          name: gbavocab-rom
           path: |
             gbavocab.gba
             gbavocab.elf
           if-no-files-found: error
   package:
-    needs: rom
     strategy:
       fail-fast: false
       matrix:
@@ -49,21 +51,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - uses: actions/download-artifact@v4
-        with:
-          name: dictionary-template
       - run: python -m pip install PyInstaller==6.16.0 Pillow==12.3.0
       - run: python tests/test_dictionary_builder.py
       - run: python tests/test_builder_app.py
       - name: Package Windows PE and test actual executable
         if: runner.os == 'Windows'
         run: |
-          python tests/test_builder_gui.py --template gbavocab.gba --out builder-dist/verification
+          python tests/test_builder_gui.py --out builder-dist/verification
           python builder/package.py
       - name: Package Linux executable and test actual executable
         if: runner.os == 'Linux'
         run: |
-          xvfb-run -a python tests/test_builder_gui.py --template gbavocab.gba --out builder-dist/verification
+          xvfb-run -a python tests/test_builder_gui.py --out builder-dist/verification
           xvfb-run -a python builder/package.py
       - uses: actions/upload-artifact@v4
         with:
@@ -72,5 +71,5 @@ jobs:
             builder-dist/gbavocab-builder-*.zip
             builder-dist/verification/*.json
             builder-dist/verification/*.png
-            builder-dist/verification/gbavocab.gba
+            builder-dist/verification/*.dict
           if-no-files-found: error

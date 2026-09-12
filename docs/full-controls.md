@@ -1,4 +1,4 @@
-# gbavocab V1.6 — full controls
+# gbavocab v1.6.0-pre.1 — full controls
 
 Learn vocabulary using flashcards and five learning boxes. Create and edit your own word lists on your Game Boy Advance.
 
@@ -12,7 +12,7 @@ Author: Halim Jarrar
 
 Use a compatible SuperFW / Supercard SD-style setup. Copy the runnable `gbavocab.gba` release ROM to your card and launch it with your firmware. Source builds produce the same `gbavocab.gba` filename. Back up your vocabulary TXT files before using any application that edits them.
 
-The home screen reads `gbavocab V1.6` and `files: /gbavocab`. There is no built-in vocabulary, demo list or automatic fallback. Missing storage is reported; Controls and Credits remain available even without a list.
+The home screen reads `gbavocab v1.6.0-pre.1` and `files: /gbavocab`. There is no built-in vocabulary, demo list or automatic fallback. Missing storage is reported; Controls and Credits remain available even without a list.
 
 - Up / Down: choose LOAD LIST, NEW LIST or LOCAL DICTIONARY. LOAD LIST is first and selected by default.
 - A: open the selected action.
@@ -91,7 +91,7 @@ The confirmation shows the captured word and translation and asks “Are you sur
 
 ### Add from dictionary and manual save
 
-Add from dictionary opens the matching local dictionary, or a chooser when several match. If this list has no language footer, choose a dictionary and confirm FRONT/BACK languages first; Left/Right swaps them. The pair remains in RAM until the next manual save. A canceled lookup leaves the captured entry unchanged. See page 8 for search controls.
+Add from dictionary opens the matching local dictionary, or a chooser when several match. If this list has no language metadata, choose a dictionary and confirm FRONT/BACK languages first; Left/Right swaps them. The pair remains in RAM until the next manual save. A canceled lookup leaves the captured entry unchanged. See page 8 for search controls.
 
 Selecting a result prefills a NEW two-step Add draft, never Edit. You may change either field and confirm or cancel normally. Confirmed additions, edits and deletions affect the active in-memory list with zero TXT rewrites. Learning Start manually writes pending entries, language metadata and learning boxes. The Save choice when switching lists can also flush them.
 
@@ -180,11 +180,11 @@ Invalid, overlong or excess imported rows make the source read-only with a warni
 
 ### How the TXT stores progress
 
-Manual learning saves and saves containing pending learning / entry changes use the existing grouped CRLF format. Rows are grouped into Boxes 1–5; exactly one empty physical line separates each pair of boxes, including empty first or middle boxes (four separators total). An optional final language-pair footer is preserved once on manual save. It is not a vocabulary entry or box separator. Reopening restores box memberships and the language pair.
+Manual learning saves and saves containing pending learning / entry changes use the existing grouped CRLF format. Rows are grouped into Boxes 1–5; exactly one empty physical line separates each pair of boxes, including empty first or middle boxes (four separators total). Language metadata is stored separately in matching-basename .sav. A valid legacy footer migrates only after durable SAV readback; migration-only saving preserves every other TXT byte. Reopening restores box memberships and the saved language pair.
 
 V1.6 entry confirmations are RAM-only. Manual saving uses the established grouped-save normalization of newlines and boxes. The underlying transaction retains its checked write, sync, rename, validation and recovery architecture.
 
-No permanent `.sav`, settings or sidecar files. Temporary `name.txt.gbv1.tmp` / `.bak` / `.txn` files use slots 1–9. Keep recovery files after errors; back up before manual recovery. Keep TXT backups; never remove power/card during saving or externally edit/swap the loaded source. Filenames over 54 bytes need PC renaming before saving. Saves check writes and scan the installed TXT, without independent full-original rereads or pre-install row comparison. Same-size external edits can escape detection; recovery/atomicity is not guaranteed. Four injected-error cases left orphan space despite content/retry passes; see `docs/file-io-simple-save.md`.
+Matching-basename `.sav` stores the list pair only; vocabulary and progress stay in TXT. Temporary `name.txt.gbv1.tmp` / `.bak` / `.txn` files use slots 1–9. Keep recovery files after errors; back up before manual recovery. Keep TXT backups; never remove power/card during saving or externally edit/swap the loaded source. Filenames over 54 bytes need PC renaming before saving. Saves check writes and scan the installed TXT, without independent full-original rereads or pre-install row comparison. Same-size external edits can escape detection; recovery/atomicity is not guaranteed. Four injected-error cases left orphan space despite content/retry passes; see `docs/file-io-simple-save.md`.
 
 ### Compatibility and credits
 
@@ -222,76 +222,47 @@ Test backed-up copies of the supplied lists on your actual SD card and firmware.
 
 <!-- PAGEBREAK -->
 
-## 8. LOCAL DICTIONARY: search and add
+## 8. LOCAL DICTIONARY and list language pairs
 
-Dictionaries live in the ROM and can be searched without an SD card. The supplied template has none: use the PC builder with your own legally obtained exports. A single dictionary opens directly; multiple dictionaries show a chooser. Up/Down selects a dictionary, A opens it and B cancels. Entry-editor lookup only offers dictionaries matching the list's language pair in either orientation. No match gives an explanatory message, not an unrelated default.
+Dictionaries are custom indexed .dict files directly in SD-root /gbavocab, not embedded in the ROM. One normal gbavocab.gba opens up to 24 discovered filenames. The chooser displays internal name and language pair. An SD card is required; there are no built-in dictionaries. LOAD LIST only shows TXT files. One matching dictionary opens directly, otherwise Up/Down chooses, A opens and B cancels.
 
-Type using the same letter, accent, punctuation and case controls as the entry drafts. Results update as a prefix is entered; the embedded dictionary uses PC-built sorted indexes in both directions. A bounded scan also checks SD additions when the query or direction changes, not every display frame. Saved matches appear first in insertion order, followed by indexed ROM matches. ASCII A–Z match a–z; other Unicode characters, accents, spacing and punctuation match exactly. Matching is not fuzzy, substring, accent-insensitive or Unicode-normalized. Multiword fields stay intact.
+Type with the same entry controls. Results update on prefix/direction changes, using PC-built bidirectional base indexes and a bounded addition scan, not a full base scan or per-frame SD scan. Added matches precede base matches. ASCII case is ignored; other Unicode, accents, spacing and punctuation match exactly.
 
-- Hold Start + Up / Down to move through results and scroll. Hold continues moving on the inherited navigation-repeat schedule. Two word/translation pairs are visible at once; long preview lines are clipped, but selecting retains the full fields.
-- Hold Start and press A: select the highlighted word/translation pair. Empty results cannot be selected.
-- Release Start to resume normal typing. Release the companion key before starting a fresh letter chord so release tails cannot type unwanted characters.
-- Start + Left / Right: move the query caret by a logical UTF-8 character. The query display follows its current wrapped row.
-- Start + L: toggle search direction for the current dictionary once per L press. It does not change the list's FRONT/BACK orientation.
-- Start + R: open the dictionary chooser; one available dictionary stays current. B in a reopened chooser returns to the same query/dictionary; changing dictionary retains the query.
-- Start + B: cancel lookup. B alone still deletes a character. Release Select before other Start shortcuts, except the dedicated Start + Select add-entry chord described on page 10.
+- Hold Start + Up / Down: browse results; release Start to type.
+- Start + A: select. Home lookup next chooses a destination TXT with the existing dirty-list guard; Add from dictionary prefills the active list's new draft.
+- Start + B: return / cancel.
+- Start + L: change search direction, never list column orientation.
+- Start + R: chooser; one available dictionary stays current. B returns to the same query; switching dictionaries retains the query.
+- Start + Left / Right: caret navigation; use normal typing controls otherwise.
 
-From Entry editor, a selected pair opens a NEW two-step Add draft in the active list. From home LOCAL DICTIONARY, select a result and then an existing destination TXT in LOAD LIST. The normal Save/Discard/Cancel guard protects any dirty active list. B in that destination picker cancels without switching. A mismatched destination pair is explained rather than silently reversing or replacing its metadata. To use a new destination, create it from home first.
+### List metadata
 
-### Optional list language footer
+Spanish.txt uses Spanish.sav; Travel.txt uses Travel.sav. All are directly in /gbavocab, with no subdirectories. SAV stores only front/back language codes; words and learning progress remain in TXT. Without SAV, choose and confirm the pair; Left/Right swaps it. It stays in RAM until manual save, even when the following entry draft is canceled. Copy/rename both files together. These are application-managed metadata, not cartridge SRAM or emulator saves.
 
-The exact final-line syntax is `# gbavocab: front=en; back=de`. Each code has 1–11 lowercase ASCII letters, digits or hyphens, starts with a letter, and the two codes must differ. There are no extra spaces or fields beyond those shown. LF and CRLF endings and an unterminated final footer are accepted. Blank lines may follow it; another nonempty line or a duplicate/malformed footer makes the list read-only to avoid dropping unseen data.
-
-The identifiers describe the two TXT columns, not a ROM-specific dictionary ID. Either internal dictionary orientation and either search direction map into the correct list columns. Without a footer, first Add from dictionary asks for a dictionary and FRONT/BACK pair before search. Confirmed pair metadata stays in RAM, even if the later draft is canceled, until manual save or discard. Remove only the footer line on your PC before loading the list to reset its pair. Learning lists remain plain UTF-8 without a save sidecar; separate dictionary additions use .sav files. Older app versions may treat this footer as a rejected row: remove it before using them.
+A valid legacy footer such as `# gbavocab: front=en; back=de` migrates only after matching .sav is durably written and verified. Invalid/conflicting metadata blocks saves; back up both files and repair on a PC before reloading. To reset a pair, back up and remove its .sav while the app is closed, and remove any legacy footer from a backed-up TXT. NEW LIST never reuses orphan .sav/.sav.tmp names. Pair columns always remain canonical regardless of dictionary orientation or current search direction.
 
 <!-- PAGEBREAK -->
 
-## 9. PC dictionary ROM builder
+## 9. PC standalone dictionary builder
 
-Windows: extract the entire builder ZIP, then run `gbavocab-builder.exe` inside its folder. Keep the accompanying `_internal` files beside it. No Python installation or GBA development toolchain is needed. The executable is unsigned; Windows may show an unrecognized-app warning. Obtain it only from a trusted release and compare its published hash.
+Extract the native Windows or Linux package and launch gbavocab-builder.exe or gbavocab-builder. No compiler, ROM template or network is needed. Import TXT / TSV accepts legally obtained UTF-8 TAB-separated exports; enter a name, front/back language codes (en / de, for example), and optional display labels. Choose Save .dict as, then copy the result directly into /gbavocab. Keep the same normal gbavocab.gba.
 
-Linux: extract the Linux builder ZIP, mark `gbavocab-builder` executable if necessary, and launch it from a graphical desktop. Keep `_internal` beside it. The packaged build targets modern x86-64 glibc Linux. Alternatively run `python3 builder/app.py` with Python 3.11+, Tk installed and the provided `builder/template.gba`; no GBA compiler is required.
+Open .dict reads both base entries and committed GBA additions. Save As builds a fresh fully indexed file and frees addition slots. It requires a different output path to preserve the original. Back up the original before installing a compacted copy on the SD card. No copyrighted dictionary is bundled; tests use synthetic data.
 
-1. Choose Add export and select your own dict.cc-style UTF-8 TXT/TSV file.
+The first two TAB-separated fields are preserved, including multiword text and field spaces. Additional dict.cc columns are ignored only in dictionary imports. BOM, LF/CRLF, comments, blank and decorative separator lines are tolerated. Invalid UTF-8, missing/blank fields and overlong rows are errors, not silent truncation. Names use 1..31 UTF-8 bytes; labels 1..23; distinct codes use 1..11 lowercase ASCII letters/digits/hyphens starting with a letter. Each editable pair is at most 191 UTF-8 bytes including TAB.
 
-2. Enter a unique dictionary name, language identifiers (for example en / de), and labels (English / German). The first language describes the export's first column, not necessarily the list front you will later choose. Repeat for more dictionaries; Remove selected removes an import before building.
-
-3. Choose Build .gba, pick an output filename, and wait for indexing, fit checking and readback verification. Copy the generated ROM to the flashcard. Your learning TXT lists still belong in `/gbavocab` on the SD card.
-
-### Import and capacity rules
-
-The first two TAB-separated columns are preserved without splitting words or stripping field spaces. Optional additional dict.cc columns are ignored for dictionary lookup. UTF-8 BOM, LF/CRLF, comments beginning with #, blank and decorative box/separator lines are tolerated. Invalid UTF-8, missing/blank fields and overlong rows produce a line-numbered error rather than silent truncation. No copyrighted dictionary is bundled; automated capacity tests generate clearly synthetic vocabulary.
-
-Up to 16 named dictionaries may be installed. Names use at most 31 UTF-8 bytes; language labels at most 23. An editable pair has at most 191 UTF-8 bytes including its TAB. Dictionaries are not limited to the learning list's 10,000 entries: 40,000+ dictionary entries are supported through ROM-resident tables and bounded query/result RAM.
-
-The hard cartridge ceiling is 32 MiB including the base application, both directional indexes, descriptors and strings. Each entry uses 16 index/record bytes plus the two UTF-8 strings and their two NUL terminators; each dictionary adds a 120-byte descriptor and up to three alignment bytes. The payload adds a 16-byte header. Exact capacity depends on text lengths and the template size. The builder reports the actual bytes and rejects an oversized output before replacing it. A 40,010-entry synthetic dictionary is a capacity check, not a claim that every export of any size fits.
-
-The GUI reads exports into PC memory; very large files may take time or exceed available desktop RAM before the ROM fit check. The generated ROM needs no PC files or SD dictionary index at runtime. This version does not download dictionaries, bypass export licensing, or modify input exports.
+The indexed base limit is 32 MiB per file, independent of the ROM and 10,000-entry learning limit. 40,000+ base entries are supported. Each entry uses 28 record/index bytes plus two strings and NUL terminators; the header is 160 bytes. PC imports use desktop RAM. GBA reads use bounded buffering and binary search; no whole base allocation is needed. The custom format is not StarDict or standard .dict; see docs/dictionary-format.md for exact version and CRC rules.
 
 <!-- PAGEBREAK -->
 
-## 10. Add words to a dictionary: SD .sav files
+## 10. Add words to the same .dict file
 
-Open LOCAL DICTIONARY from home and open the desired dictionary. This feature is available only from the main menu, not through the Entry editor's Add from dictionary route.
+This feature is available only from the main menu: open LOCAL DICTIONARY, then the desired dictionary. Start + Select opens Dictionary entry 1/2. It is disabled in Add from dictionary. Enter the displayed first language; Start + A advances to 2/2, where you enter the displayed second language. The canonical dictionary language order does not follow the search direction.
 
-1. Press Start + Select together to open Dictionary entry 1/2. Either press order works; keep the first button held while pressing the second. Release both before typing.
+Start + A on step 2 saves immediately to the same .dict file. Start + B returns to step 1 with drafts intact, or cancels from step 1. Confirmation follows body write/sync, commit write/sync, close and installed readback. B dismisses confirmation. Failure retains the draft for retry or cancellation. Learning TXT, pending list changes, base dictionary and earlier additions are not rewritten.
 
-2. Enter a word in the language shown at the top. Start + A advances to Dictionary entry 2/2. Enter the translation in its displayed language. These languages follow the dictionary's original column order, regardless of the current search direction.
+### Append recovery and limits
 
-3. Start + A on step 2 saves immediately to the dictionary's SD file. This is separate from a learning list's manual save. The saved confirmation appears only after write, sync, close and installed-file readback succeed. B returns from that confirmation to lookup.
+Each file supports 512 physical checksummed addition slots, each with the normal 191-byte row limit. Incomplete/uncommitted slots are ignored and never overwritten: retry pads only the remaining tail then appends a new slot. Exact existing additions make retries idempotent. A corrupt committed record blocks addition searching/saving rather than silently treating it as an empty slot. Both lookup routes search valid additions before indexed base matches. Use PC Open .dict / Save As to compact when slots fill; this does not edit/delete individual dictionary entries.
 
-Start + B on step 2 returns to step 1 with both drafts intact. Start + B on step 1 cancels without writing. On a save failure, the draft remains available to correct, retry or cancel. Your active learning list, its pending changes and the ROM are not modified.
-
-### Storage and lookup
-
-New words are kept in a per-dictionary .sav file in `/gbavocab/dictionaries` on the SD card. This is an application-managed binary, checksummed file, not cartridge SRAM, an emulator's automatic save, or a TXT file with a different extension. gbavocab creates the folder and filename; do not edit these files in a text editor. Back up the whole folder.
-
-The filename encodes the dictionary's exact UTF-8 name and ordered language codes. Keep those unchanged when rebuilding the ROM to retain its additions; changing the ROM filename or rearranging dictionaries does not change that identity. Dictionaries with different names have separate files even for the same language pair.
-
-Each dictionary supports up to 512 added pairs, each within the normal 191-byte UTF-8 row limit. Saved prefix matches appear first, in insertion order, and are available both in home lookup and Add from dictionary. The original ROM dictionary remains read-only. This feature adds words; it does not edit or delete existing dictionary records. Without readable SD storage, ROM lookup still works and the screen warns that SAV additions are unavailable.
-
-### Interrupted saves
-
-Saves use `.sav.tmp` staging and `.sav.bak` backup files, with full prior-record and new-record readback before backup cleanup. Ordinary write/sync failures preserve the original and allow retry. An interrupted rename, failed cleanup or ambiguous FAT alias leaves recovery files intact and blocks further dictionary saves rather than risking deletion or duplicate retry. ROM lookup remains usable.
-
-For a recovery warning, power down and copy the entire dictionary folder to a PC before changing anything. Recover on a copy, with a filesystem check if necessary; do not simply delete backup/staging files on the original card because interrupted FAT renames can leave names sharing storage. Physical Supercard power-loss behavior still needs device testing; host fault-injection tests are not hardware certification.
+Back up .dict files. Do not externally edit/swap a file while it is open. Never remove power/card during saving. Ordinary returned I/O failures and every partial slot boundary are tested through a host-backed production FatFS API, not physical hardware certification. A persistent I/O warning needs PC backup/checking and reload. Older unpublished per-dictionary .sav files are unsupported and are never silently deleted. They are not read as list metadata or automatically imported into .dict; preserve them for manual recovery.

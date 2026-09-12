@@ -23,6 +23,7 @@ static std::map<DIR*,std::vector<std::string>> dirs;
 std::string fat_root, corrupt_on_rename, crash_after_rename;
 // Correctness-only fault: successful short reads before physical EOF.
 UINT fat_read_limit = 0;
+uint64_t fat_bytes_read=0,fat_bytes_written=0;
 // Return FR_OK to continue; hooks may throw to simulate process interruption.
 std::function<FRESULT(const std::string&,const std::string&)> fat_hook;
 // Semantic lifecycle observer: identity of the FIL used, not I/O measurements.
@@ -42,8 +43,8 @@ FRESULT f_open(FIL* f,const TCHAR* p,BYTE mode){
  return hook("opened",p);
 }
 FRESULT f_close(FIL* f){if(fat_handle_hook)fat_handle_hook("close",f);auto i=files.find(f);if(i==files.end())return FR_INVALID_OBJECT;auto name=names[f];auto r=hook("close",name);if(r!=FR_OK)return r;int e=fclose(i->second);files.erase(i);names.erase(f);return e?FR_DISK_ERR:hook("closed",name);}
-FRESULT f_read(FIL* f,void* b,UINT n,UINT* used){if(fat_handle_hook)fat_handle_hook("read",f);*used=0;auto r=hook("read",names[f]);if(r!=FR_OK)return r;if(fat_read_limit && n>fat_read_limit)n=fat_read_limit;*used=fread(b,1,n,files.at(f));f->fptr+=*used;return ferror(files.at(f))?FR_DISK_ERR:FR_OK;}
-FRESULT f_write(FIL* f,const void* b,UINT n,UINT* used){*used=0;auto r=hook("write",names[f]);if(r!=FR_OK){*used=fwrite(b,1,n>5?5:n,files.at(f));fflush(files.at(f));return r;}*used=fwrite(b,1,n,files.at(f));f->fptr+=*used;f->obj.objsize=f->fptr;if(*used!=n||ferror(files.at(f)))return FR_DISK_ERR;fflush(files.at(f));return hook("wrote",names[f]);}
+FRESULT f_read(FIL* f,void* b,UINT n,UINT* used){if(fat_handle_hook)fat_handle_hook("read",f);*used=0;auto r=hook("read",names[f]);if(r!=FR_OK)return r;if(fat_read_limit && n>fat_read_limit)n=fat_read_limit;*used=fread(b,1,n,files.at(f));fat_bytes_read+=*used;f->fptr+=*used;return ferror(files.at(f))?FR_DISK_ERR:FR_OK;}
+FRESULT f_write(FIL* f,const void* b,UINT n,UINT* used){*used=0;auto r=hook("write",names[f]);if(r!=FR_OK){*used=fwrite(b,1,n>5?5:n,files.at(f));fflush(files.at(f));return r;}*used=fwrite(b,1,n,files.at(f));fat_bytes_written+=*used;f->fptr+=*used;f->obj.objsize=f->fptr;if(*used!=n||ferror(files.at(f)))return FR_DISK_ERR;fflush(files.at(f));return hook("wrote",names[f]);}
 FRESULT f_sync(FIL* f){auto r=hook("sync",names[f]);if(r!=FR_OK)return r;return fflush(files.at(f))==0?hook("synced",names[f]):FR_DISK_ERR;}
 FRESULT f_lseek(FIL* f,FSIZE_t n){auto r=hook("seek",names[f]);if(r!=FR_OK)return r;f->fptr=n;return fseek(files.at(f),n,SEEK_SET)==0?FR_OK:FR_DISK_ERR;}
 FRESULT f_stat(const TCHAR* p,FILINFO* i){auto r=hook("stat",p);if(r!=FR_OK)return r;if(!std::filesystem::exists(path(p)))return FR_NO_FILE;if(i)i->fsize=std::filesystem::file_size(path(p));return FR_OK;}

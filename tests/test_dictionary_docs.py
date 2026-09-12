@@ -8,7 +8,7 @@ for phrase in ['LOCAL DICTIONARY','Start + L','Start + R','Windows','191','32 Mi
     assert phrase in manual, phrase
 assert 'Autosave ON' not in manual
 assert 'Start+Select: add new entry.' in help
-assert 'per-dictionary .sav' in manual and '512' in manual
+assert 'same .dict file' in manual and '512' in manual
 assert 'only from the main menu' in manual
 assert 'checksummed' in manual
 print('PASS V1.6 dictionary controls/manual coverage')
