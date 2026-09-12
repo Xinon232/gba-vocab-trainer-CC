@@ -9,8 +9,8 @@ public:
     explicit EntryEditor(writer::Layout::Width measure) : measure_(measure) {}
     void open(int target, const char* raw);
     bool prefill_add(const char* front,const char* back);
-    void open_lookup();
-    enum class LookupAction { none, up, down, direction, chooser, select, cancel };
+    void open_lookup(bool allow_add=false);
+    enum class LookupAction { none, up, down, direction, chooser, select, cancel, add };
     LookupAction take_lookup_action() {auto a=lookup_action_;lookup_action_=LookupAction::none;return a;}
     bool take_dictionary_request() {bool r=dictionary_request_;dictionary_request_=false;return r;}
     void frame(uint16_t held);
@@ -47,7 +47,7 @@ private:
     EntryMutation operation_ = EntryMutation::add;
     uint16_t previous_ = 0;
     bool wait_release_ = true, commit_ = false, status_visible_ = true;
-    bool dictionary_request_=false,lookup_=false;
+    bool dictionary_request_=false,lookup_=false,lookup_add_=false;
     LookupAction lookup_action_=LookupAction::none;
     uint16_t lookup_once_=0;
     bool provisional_ = false, provisional_dirty_ = false;

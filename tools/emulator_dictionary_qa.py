@@ -13,7 +13,7 @@ def main():
     parser.add_argument('--rom',type=Path,required=True)
     parser.add_argument('--out',type=Path,required=True)
     parser.add_argument('--mode',choices=['template','multi','single','baseline'],required=True)
-    parser.add_argument('--help-pages',type=int,default=27)
+    parser.add_argument('--help-pages',type=int,default=30)
     args=parser.parse_args()
     args.out.mkdir(parents=True,exist_ok=False)
     rom=args.out/'gbavocab.gba';shutil.copy2(args.rom,rom)

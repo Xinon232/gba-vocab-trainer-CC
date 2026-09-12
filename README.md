@@ -27,6 +27,8 @@ In lookup, hold **Start+Up/Down** to browse results, **Start+A** to select, **St
 
 The optional final TXT footer `# gbavocab: front=en; back=de` identifies list columns independently of ROM dictionary IDs. First use asks for the pair; it stays in RAM until manual save. Remove that line on PC to reset the pair. Older versions may regard it as a rejected row. Full grammar and complete controls: [manual](docs/full-controls.md).
 
+**Add your own dictionary words on the GBA:** open a dictionary from the main menu, then press **Start+Select**. Enter the two displayed languages using the normal two-step editor; **Start+A** advances and then saves. **Start+B** goes back or cancels. This shortcut is disabled in Add from dictionary. New words persist immediately in a checksummed, per-dictionary `.sav` under `/gbavocab/dictionaries`, not in cartridge SRAM or learning TXT files. Both lookup routes search these additions before ROM matches. Up to 512 additions per dictionary are supported; retain the dictionary's name and ordered language codes when rebuilding its ROM. See manual section 10 for errors, backups and interrupted-save precautions.
+
 Developer checks: `bash tests/run_dictionary_tests.sh`; `python3 tests/test_builder_app.py` after a ROM build; `python3 builder/app.py --template gbavocab.gba`. Packaged builds use `builder/package.py` and the branch-scoped dictionary-builder Actions workflow. No workflow publishes releases.
 
 ## V1.5 input layout

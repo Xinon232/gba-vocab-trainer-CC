@@ -38,5 +38,14 @@ int main(){
  }
  tap(e,bit(Button::START)|bit(Button::LEFT));assert(e.text().caret_byte()==0);
  tap(e,bit(Button::UP)|bit(Button::A));assert(!std::strcmp(e.text().data(),"ba"));
- puts("PASS production editor dictionary request, NEW pair drafts/cancel, lookup actions and release tails, typing/caret resume");
+ for(bool editable:{false,true})for(int order=0;order<3;++order)for(int tail=0;tail<2;++tail){
+   e.open_lookup(editable);e.frame(0);tap(e,bit(Button::UP)|bit(Button::B));
+   if(order<2)e.frame(bit(order?Button::SELECT:Button::START));
+   e.frame(bit(Button::START)|bit(Button::SELECT));
+   assert(e.take_lookup_action()==(editable?EntryEditor::LookupAction::add:EntryEditor::LookupAction::none));
+   for(int frame=0;frame<120;++frame){e.frame(bit(Button::START)|bit(Button::SELECT));assert(e.take_lookup_action()==EntryEditor::LookupAction::none);}
+   e.frame(bit(tail?Button::START:Button::SELECT));e.frame(0);
+   assert(e.take_lookup_action()==EntryEditor::LookupAction::none);assert(!std::strcmp(e.text().data(),"a"));
+ }
+ puts("PASS production editor dictionary request, NEW pair drafts/cancel, lookup actions and release tails, typing/caret resume, main-only add chord");
 }

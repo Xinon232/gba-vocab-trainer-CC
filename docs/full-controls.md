@@ -226,7 +226,7 @@ Test backed-up copies of the supplied lists on your actual SD card and firmware.
 
 Dictionaries live in the ROM and can be searched without an SD card. The supplied template has none: use the PC builder with your own legally obtained exports. A single dictionary opens directly; multiple dictionaries show a chooser. Up/Down selects a dictionary, A opens it and B cancels. Entry-editor lookup only offers dictionaries matching the list's language pair in either orientation. No match gives an explanatory message, not an unrelated default.
 
-Type using the same letter, accent, punctuation and case controls as the entry drafts. Results update as a prefix is entered; searching never scans the whole dictionary. Both directions have PC-built sorted indexes. ASCII A–Z match a–z; other Unicode characters, accents, spacing and punctuation match exactly. Matching is not fuzzy, substring, accent-insensitive or Unicode-normalized. Multiword fields stay intact.
+Type using the same letter, accent, punctuation and case controls as the entry drafts. Results update as a prefix is entered; the embedded dictionary uses PC-built sorted indexes in both directions. A bounded scan also checks SD additions when the query or direction changes, not every display frame. Saved matches appear first in insertion order, followed by indexed ROM matches. ASCII A–Z match a–z; other Unicode characters, accents, spacing and punctuation match exactly. Matching is not fuzzy, substring, accent-insensitive or Unicode-normalized. Multiword fields stay intact.
 
 - Hold Start + Up / Down to move through results and scroll. Hold continues moving on the inherited navigation-repeat schedule. Two word/translation pairs are visible at once; long preview lines are clipped, but selecting retains the full fields.
 - Hold Start and press A: select the highlighted word/translation pair. Empty results cannot be selected.
@@ -234,7 +234,7 @@ Type using the same letter, accent, punctuation and case controls as the entry d
 - Start + Left / Right: move the query caret by a logical UTF-8 character. The query display follows its current wrapped row.
 - Start + L: toggle search direction for the current dictionary once per L press. It does not change the list's FRONT/BACK orientation.
 - Start + R: open the dictionary chooser; one available dictionary stays current. B in a reopened chooser returns to the same query/dictionary; changing dictionary retains the query.
-- Start + B: cancel lookup. B alone still deletes a character. Release Select before Start shortcuts, just as in drafts.
+- Start + B: cancel lookup. B alone still deletes a character. Release Select before other Start shortcuts, except the dedicated Start + Select add-entry chord described on page 10.
 
 From Entry editor, a selected pair opens a NEW two-step Add draft in the active list. From home LOCAL DICTIONARY, select a result and then an existing destination TXT in LOAD LIST. The normal Save/Discard/Cancel guard protects any dirty active list. B in that destination picker cancels without switching. A mismatched destination pair is explained rather than silently reversing or replacing its metadata. To use a new destination, create it from home first.
 
@@ -242,7 +242,7 @@ From Entry editor, a selected pair opens a NEW two-step Add draft in the active 
 
 The exact final-line syntax is `# gbavocab: front=en; back=de`. Each code has 1–11 lowercase ASCII letters, digits or hyphens, starts with a letter, and the two codes must differ. There are no extra spaces or fields beyond those shown. LF and CRLF endings and an unterminated final footer are accepted. Blank lines may follow it; another nonempty line or a duplicate/malformed footer makes the list read-only to avoid dropping unseen data.
 
-The identifiers describe the two TXT columns, not a ROM-specific dictionary ID. Either internal dictionary orientation and either search direction map into the correct list columns. Without a footer, first Add from dictionary asks for a dictionary and FRONT/BACK pair before search. Confirmed pair metadata stays in RAM, even if the later draft is canceled, until manual save or discard. Remove only the footer line on your PC before loading the list to reset its pair. The TXT remains plain UTF-8; there is no permanent sidecar or GBA save file. Older app versions may treat this footer as a rejected row: remove it before using them.
+The identifiers describe the two TXT columns, not a ROM-specific dictionary ID. Either internal dictionary orientation and either search direction map into the correct list columns. Without a footer, first Add from dictionary asks for a dictionary and FRONT/BACK pair before search. Confirmed pair metadata stays in RAM, even if the later draft is canceled, until manual save or discard. Remove only the footer line on your PC before loading the list to reset its pair. Learning lists remain plain UTF-8 without a save sidecar; separate dictionary additions use .sav files. Older app versions may treat this footer as a rejected row: remove it before using them.
 
 <!-- PAGEBREAK -->
 
@@ -267,3 +267,31 @@ Up to 16 named dictionaries may be installed. Names use at most 31 UTF-8 bytes; 
 The hard cartridge ceiling is 32 MiB including the base application, both directional indexes, descriptors and strings. Each entry uses 16 index/record bytes plus the two UTF-8 strings and their two NUL terminators; each dictionary adds a 120-byte descriptor and up to three alignment bytes. The payload adds a 16-byte header. Exact capacity depends on text lengths and the template size. The builder reports the actual bytes and rejects an oversized output before replacing it. A 40,010-entry synthetic dictionary is a capacity check, not a claim that every export of any size fits.
 
 The GUI reads exports into PC memory; very large files may take time or exceed available desktop RAM before the ROM fit check. The generated ROM needs no PC files or SD dictionary index at runtime. This version does not download dictionaries, bypass export licensing, or modify input exports.
+
+<!-- PAGEBREAK -->
+
+## 10. Add words to a dictionary: SD .sav files
+
+Open LOCAL DICTIONARY from home and open the desired dictionary. This feature is available only from the main menu, not through the Entry editor's Add from dictionary route.
+
+1. Press Start + Select together to open Dictionary entry 1/2. Either press order works; keep the first button held while pressing the second. Release both before typing.
+
+2. Enter a word in the language shown at the top. Start + A advances to Dictionary entry 2/2. Enter the translation in its displayed language. These languages follow the dictionary's original column order, regardless of the current search direction.
+
+3. Start + A on step 2 saves immediately to the dictionary's SD file. This is separate from a learning list's manual save. The saved confirmation appears only after write, sync, close and installed-file readback succeed. B returns from that confirmation to lookup.
+
+Start + B on step 2 returns to step 1 with both drafts intact. Start + B on step 1 cancels without writing. On a save failure, the draft remains available to correct, retry or cancel. Your active learning list, its pending changes and the ROM are not modified.
+
+### Storage and lookup
+
+New words are kept in a per-dictionary .sav file in `/gbavocab/dictionaries` on the SD card. This is an application-managed binary, checksummed file, not cartridge SRAM, an emulator's automatic save, or a TXT file with a different extension. gbavocab creates the folder and filename; do not edit these files in a text editor. Back up the whole folder.
+
+The filename encodes the dictionary's exact UTF-8 name and ordered language codes. Keep those unchanged when rebuilding the ROM to retain its additions; changing the ROM filename or rearranging dictionaries does not change that identity. Dictionaries with different names have separate files even for the same language pair.
+
+Each dictionary supports up to 512 added pairs, each within the normal 191-byte UTF-8 row limit. Saved prefix matches appear first, in insertion order, and are available both in home lookup and Add from dictionary. The original ROM dictionary remains read-only. This feature adds words; it does not edit or delete existing dictionary records. Without readable SD storage, ROM lookup still works and the screen warns that SAV additions are unavailable.
+
+### Interrupted saves
+
+Saves use `.sav.tmp` staging and `.sav.bak` backup files, with full prior-record and new-record readback before backup cleanup. Ordinary write/sync failures preserve the original and allow retry. An interrupted rename, failed cleanup or ambiguous FAT alias leaves recovery files intact and blocks further dictionary saves rather than risking deletion or duplicate retry. ROM lookup remains usable.
+
+For a recovery warning, power down and copy the entire dictionary folder to a PC before changing anything. Recover on a copy, with a filesystem check if necessary; do not simply delete backup/staging files on the original card because interrupted FAT renames can leave names sharing storage. Physical Supercard power-loss behavior still needs device testing; host fault-injection tests are not hardware certification.

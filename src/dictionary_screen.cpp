@@ -1,6 +1,8 @@
 #include "dictionary_screen.h"
 #include "dictionary.h"
+#include "dictionary_search.h"
 #include "entry_editor.h"
+#include "entry_screen.h"
 #include "entry_render.h"
 #include "render.h"
 #include "bn_core.h"
@@ -15,6 +17,7 @@ extern "C" {
 }
 namespace {
 BN_DATA_EWRAM_BSS EntryEditor query(entry_glyph_width);
+BN_DATA_EWRAM_BSS DictionaryAdditions additions;
 constexpr bn::color colors[16]={bn::color(31,31,31),bn::color(0,0,0),bn::color(12,12,12),bn::color(20,20,20)};
 constexpr bn::bg_palette_item palette(bn::span<const bn::color>(colors),bn::bpp_mode::BPP_8);
 uint16_t keys() {
@@ -42,9 +45,35 @@ void notice(Canvas& p,const char* a,const char* b){
  release();
 }
 void number(char* out,uint32_t n){char digits[11];int i=0;do{digits[i++]=char('0'+n%10);n/=10;}while(n);int j=0;while(i)out[j++]=digits[--i];out[j]=0;}
+bool add_to_dictionary(Canvas& p,Dictionary d){
+ auto& add_editor=entry_draft_editor();
+ add_editor.open(-1,nullptr);add_editor.prefill_add("","");
+ while(add_editor.active()){
+  add_editor.frame(keys());
+  if(add_editor.screen()==EntryEditor::Screen::menu){release();return false;}
+  if(add_editor.commit_requested()){
+   p.clear();p.ui(8,64,"SAVING DICTIONARY");p.flip();
+   bool saved=additions.append(add_editor.row());add_editor.finish(saved,additions.error());
+   if(saved){notice(p,"Entry saved to dictionary.","Stored in its SD .sav file.");return true;}
+  }
+  p.clear();
+  render_entry(add_editor,p.pixels,[](void* ctx,int x,int y,const char* text){
+   auto& add_editor=entry_draft_editor();
+   auto& canvas=*static_cast<Canvas*>(ctx);
+   if(y==0)text=add_editor.screen()==EntryEditor::Screen::front?"Dictionary entry 1/2":"Dictionary entry 2/2";
+   if(y==18)return;
+   if(y==144&&add_editor.screen()==EntryEditor::Screen::back)text="Start+A: Save  Start+B: Back";
+   canvas.ui(x,y,text);
+  },&p);
+  p.body(8,18,d.label(add_editor.screen()==EntryEditor::Screen::back?1:0));p.flip();
+ }
+ return false;
+}
 }
 
 bool run_dictionary_screen(Renderer& renderer,VocabFile* target,DictionaryResult& result) {
+ additions.set_available(vocab_file_sd_ready());
+ char visible_rows[2][2][192];
  const PairMetadata* filter=target?&target->languages:nullptr;
  renderer.reset();bn::core::update();bn::core::update();
  auto catalog=dictionary_rom();int eligible[16],count=0;
@@ -59,8 +88,8 @@ bool run_dictionary_screen(Renderer& renderer,VocabFile* target,DictionaryResult
    Dictionary d=catalog.dictionary(eligible[choice]);
    bool pair_prompt=target&&!target->languages.present()&&!chooser;
    if(filter&&filter->present())side=catalog.match(eligible[choice],filter->front,filter->back);
-   auto range=d.prefix(side,"");uint32_t selected=range.begin;
-   query.open_lookup();char previous[192]={};
+   DictionarySearch search(additions);search.open(d);search.search(side,"");uint32_t selected=0;
+   query.open_lookup(!target);char previous[192]={};bool refresh=true;uint32_t cached_top=~0u;
    while(!done) {
     auto held=keys();
     if(wait){if(!held){wait=false;query.frame(0);}}
@@ -72,7 +101,7 @@ bool run_dictionary_screen(Renderer& renderer,VocabFile* target,DictionaryResult
       if(++target->array_generation==0)++target->array_generation;
       int chosen=eligible[choice];count=0;
       for(int i=0;i<catalog.count();++i)if(catalog.match(i,filter->front,filter->back)>=0){if(i==chosen)choice=count;eligible[count++]=i;}
-      range=d.prefix(side,query.text().data());selected=range.begin;pair_prompt=false;wait=true;
+      search.search(side,query.text().data());selected=0;refresh=true;pair_prompt=false;wait=true;
      }
     }
     else if(chooser) {
@@ -84,29 +113,31 @@ bool run_dictionary_screen(Renderer& renderer,VocabFile* target,DictionaryResult
      if(bn::keypad::down_pressed())choice=(choice+1)%count;
      if(bn::keypad::a_pressed()) {
       chooser=false;wait=true;d=catalog.dictionary(eligible[choice]);
+      search.open(d);
       pair_prompt=target&&!target->languages.present();
       side=filter&&filter->present()?catalog.match(eligible[choice],filter->front,filter->back):0;
-      range=d.prefix(side,query.text().data());selected=range.begin;
+      search.search(side,query.text().data());selected=0;refresh=true;
      }
     } else {
      query.frame(held);
      using A=EntryEditor::LookupAction;
      switch(query.take_lookup_action()) {
      case A::cancel:done=true;break;
-     case A::up:if(selected>range.begin)--selected;break;
-     case A::down:if(selected+1<range.end)++selected;break;
-     case A::direction:side^=1;range=d.prefix(side,query.text().data());selected=range.begin;break;
+     case A::up:if(selected>0)--selected;break;
+     case A::down:if(selected+1<search.count())++selected;break;
+     case A::direction:side^=1;search.search(side,query.text().data());selected=0;refresh=true;break;
      case A::chooser:if(count>1){chooser_origin=choice;chooser=true;wait=true;}break;
+     case A::add:
+      if(!target){add_to_dictionary(p,d);search.search(side,query.text().data());selected=0;refresh=true;wait=true;}
+      break;
      case A::select:
-      if(selected<range.end) {
-       auto row=d.row_at(side,selected);
-       std::strcpy(result.front,d.word(row,0));std::strcpy(result.back,d.word(row,1));
+      if(search.read(selected,result.front,result.back)) {
        result.languages.set(d.code(0),d.code(1));picked=true;done=true;
       }break;
      default:break;
      }
      if(std::strcmp(previous,query.text().data())) {
-      std::strcpy(previous,query.text().data());range=d.prefix(side,previous);selected=range.begin;
+      std::strcpy(previous,query.text().data());search.search(side,previous);selected=0;refresh=true;
      }
     }
     p.clear();
@@ -126,19 +157,25 @@ bool run_dictionary_screen(Renderer& renderer,VocabFile* target,DictionaryResult
     }else {
      p.ui(8,0,"LOCAL DICTIONARY");p.body(8,18,d.name());
      char status[64];std::strcpy(status,d.code(side));std::strcpy(status+std::strlen(status)," > ");std::strcpy(status+std::strlen(status),d.code(side^1));std::strcpy(status+std::strlen(status),"  ");
-     number(status+std::strlen(status),range.end-range.begin);p.body(8,128,status,132);
+     number(status+std::strlen(status),search.count());p.body(8,128,status,132);
      auto caret=query.layout().position(query.text(),query.text().caret_byte());
      auto start=query.layout().row_content_start(query.text(),caret.row);
      p.body(8,38,query.text().data()+start,220);if(query.caret_visible())p.caret(8+caret.x,38);
-     if(range.begin==range.end)p.body(8,76,"No prefix matches");
-     uint32_t top=selected>=range.begin?range.begin+((selected-range.begin)/2)*2:range.begin;
-     for(uint32_t i=top;i<top+2&&i<range.end;++i){int y=58+int(i-top)*34;auto row=d.row_at(side,i);
+     if(!search.count())p.body(8,76,"No prefix matches");
+     uint32_t top=(selected/2)*2;
+     if(refresh||cached_top!=top){
+      std::memset(visible_rows,0,sizeof visible_rows);
+      for(unsigned i=0;i<2&&top+i<search.count();++i)search.read(top+i,visible_rows[i][0],visible_rows[i][1]);
+      refresh=false;cached_top=top;
+     }
+     for(uint32_t i=top;i<top+2&&i<search.count();++i){int y=58+int(i-top)*34;
       if(i==selected)p.ui(8,y,">");
-      p.body(24,y,d.word(row,side),208);p.body(24,y+16,d.word(row,side^1),208);
+      p.body(24,y,visible_rows[i-top][side],208);p.body(24,y+16,visible_rows[i-top][side^1],208);
      }
      p.body(144,128,query.input().active_group(),32);
      if(query.input().caps())p.body(184,128,"Caps",48);else if(query.input().shift_armed())p.body(184,128,"Shift",48);
-     p.ui(8,144,"Start+A: Add   Start+B: Back");
+     if(additions.error()[0])p.ui(8,144,"SAV unavailable; ROM only");
+     else p.ui(8,144,target?"Start+A: Add   Start+B: Back":"Start+Select: New entry");
     }
     p.flip();
    }

@@ -29,7 +29,10 @@ constexpr TextPage help[HOME_HELP_PAGES] = {
     {"Dictionary / search", {"Type to see prefix matches.", "Hold Start+Up/Down: results.", "Start+A: select a pair.", "Start+B: return / cancel.", "Release Start: keep typing.", "Start+Left/Right: caret."}},
     {"Dictionary / direction", {"Start+L: search direction.", "Start+R: dictionary chooser.", "One dictionary: opens direct.", "Up/Down, A: choose; B: back.", "ASCII case is ignored.", "Other Unicode matches exactly."}},
     {"Dictionary / add", {"Add from dictionary", "prefills a NEW entry draft.", "Edit either field, then apply.", "Home lookup: choose TXT next.", "Dirty list: Save/Discard/Cancel.", "Manual save persists changes."}},
-    {"Dictionary / list pair", {"First use: choose list pair.", "Left/Right: swap; A: accept.", "Pair stays in RAM until save.", "TXT footer stores front/back.", "Only matching pairs are shown.", "Remove footer on PC to reset."}}
+    {"Dictionary / list pair", {"First use: choose list pair.", "Left/Right: swap; A: accept.", "Pair stays in RAM until save.", "TXT footer stores front/back.", "Only matching pairs are shown.", "Remove footer on PC to reset."}},
+    {"Dictionary / new word", {"Open dictionary from home.", "Start+Select: add new entry.", "Not in Add from dictionary.", "Enter shown first language.", "Start+A: next, then save.", "Start+B: back / cancel."}},
+    {"Dictionary / SD save", {"New entries need a writable SD.", "One .sav for each dictionary.", "Folder: /gbavocab/dictionaries", "512 added entries per dictionary.", "Saved matches precede ROM ones.", "Both lookup routes use them."}},
+    {"Dictionary / save safety", {"This is not cartridge SRAM.", "ROM and learning TXT unchanged.", "Keep dictionary name and codes", "when rebuilding its ROM.", "Failure keeps the draft.", "Recovery warning: back up on PC."}}
 };
 constexpr TextPage credits[HOME_CREDIT_PAGES] = {
     {"Credits / author", {"Made by Halim Jarrar", "(C) 2026", "halim-jarrar.de", "monday@halim-jarrar.de", "", ""}},

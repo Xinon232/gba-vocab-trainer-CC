@@ -28,6 +28,7 @@ uint16_t keys() {
     return result;
 }
 }
+EntryEditor& entry_draft_editor(){return editor;}
 void run_entry_screen(Renderer& renderer,State& state,VocabFile& vf,const char* fallback,int used,const char* front,const char* back) {
     const int target=state.entry_target(vf);
     char raw[VOCAB_RAW_LINE_MAX];

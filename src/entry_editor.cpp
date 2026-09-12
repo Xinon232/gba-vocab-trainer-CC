@@ -21,8 +21,8 @@ bool EntryEditor::prefill_add(const char* front,const char* back) {
     operation_=EntryMutation::add;commit_=false;lookup_=false;message_="";
     change(Screen::front);return true;
 }
-void EntryEditor::open_lookup() {
-    open(-1,nullptr);prefill_add("","");lookup_=true;
+void EntryEditor::open_lookup(bool allow_add) {
+    open(-1,nullptr);prefill_add("","");lookup_=true;lookup_add_=allow_add;
 }
 void EntryEditor::change(Screen screen) {
     screen_ = screen;
@@ -162,6 +162,7 @@ void EntryEditor::consume(writer::InputEvent e) {
             if (!provisional_dirty_) text().mark_saved();
         }
         provisional_ = false;
+        if(lookup_){if(lookup_add_)lookup_action_=LookupAction::add;break;}
         status_visible_ = !status_visible_;
         break;
     case K::INSERT:
