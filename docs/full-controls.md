@@ -39,7 +39,7 @@ Loading or creating another list while the active list is dirty asks: A = Save, 
 
 ## 2. Learning with flashcards
 
-Each entry has a front (word) and back (translation), and belongs to one of five boxes. New entries go first in Box 1. The initial direction mode is alternating, starting with the front. Direction mode and navigation are session state, not a permanent settings file.
+Each entry has a front (word) and back (translation), and belongs to one of five boxes. New entries go first in Box 1. Each list remembers its manually saved direction mode; missing/legacy mode defaults to Alternate, starting with the front. Navigation remains session state.
 
 - Hold R: reveal the answer. Release R to hide it during normal learning.
 - A: mark correct, advance one box (Box 5 stays Box 5), then show the next card in the current box.
@@ -184,7 +184,7 @@ Manual learning saves and saves containing pending learning / entry changes use 
 
 V1.6 entry confirmations are RAM-only. Manual saving uses the established grouped-save normalization of newlines and boxes. The underlying transaction retains its checked write, sync, rename, validation and recovery architecture.
 
-Matching-basename `.sav` stores the list pair only; vocabulary and progress stay in TXT. Temporary `name.txt.gbv1.tmp` / `.bak` / `.txn` files use slots 1–9. Keep recovery files after errors; back up before manual recovery. Keep TXT backups; never remove power/card during saving or externally edit/swap the loaded source. Filenames over 54 bytes need PC renaming before saving. Saves check writes and scan the installed TXT, without independent full-original rereads or pre-install row comparison. Same-size external edits can escape detection; recovery/atomicity is not guaranteed. Four injected-error cases left orphan space despite content/retry passes; see `docs/file-io-simple-save.md`.
+Matching-basename `.sav` stores each list's language pair, learning mode and preferred dictionary filename on manual save; vocabulary and progress stay in TXT. Temporary `name.txt.gbv1.tmp` / `.bak` / `.txn` files use slots 1–9. Keep recovery files after errors; back up before manual recovery. Keep TXT backups; never remove power/card during saving or externally edit/swap the loaded source. Filenames over 54 bytes need PC renaming before saving. Saves check writes and scan the installed TXT, without independent full-original rereads or pre-install row comparison. Same-size external edits can escape detection; recovery/atomicity is not guaranteed. Four injected-error cases left orphan space despite content/retry passes; see `docs/file-io-simple-save.md`.
 
 ### Compatibility and credits
 
