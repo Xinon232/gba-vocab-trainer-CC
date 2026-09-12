@@ -1,5 +1,6 @@
 #include "entry_screen.h"
 #include "entry_render.h"
+#include "dictionary_screen.h"
 #include "bn_core.h"
 #include "bn_keypad.h"
 #include "bn_bg_palette_item.h"
@@ -27,16 +28,19 @@ uint16_t keys() {
     return result;
 }
 }
-void run_entry_screen(Renderer& renderer,State& state,VocabFile& vf,const char* fallback,int used) {
+void run_entry_screen(Renderer& renderer,State& state,VocabFile& vf,const char* fallback,int used,const char* front,const char* back) {
     const int target=state.entry_target(vf);
     char raw[VOCAB_RAW_LINE_MAX];
     const bool readable=vocab_file_raw_row(vf,fallback,used,target,raw);
     editor.open(readable?target:-1,readable?raw:nullptr);
+    if(front&&back)editor.prefill_add(front,back);
     renderer.reset();
     // Release deferred sprite tiles before changing into bitmap mode's smaller
     // OBJ window, and again before recreating learning-screen sprites on exit.
     bn::core::update();bn::core::update();
-    {
+    while(editor.active()) {
+      bool dictionary_requested=false;
+      {
         auto bg=bn::palette_bitmap_bg_ptr::create(palette);
         bn::palette_bitmap_bg_painter painter(bg);
         bn::sprite_font font(bn::sprite_items::ui_variable_8x16_font,
@@ -48,15 +52,14 @@ void run_entry_screen(Renderer& renderer,State& state,VocabFile& vf,const char* 
         Ui ui{generator,{}};
         while(editor.active()) {
             editor.frame(keys());
+            if(editor.take_dictionary_request()){dictionary_requested=true;break;}
             if(editor.commit_requested()) {
                 ui.sprites.clear();painter.fill(0);
-                ui_line(&ui,8,64,editor.autosave()?"SAVING - DO NOT POWER OFF":"APPLYING ENTRY");
+                ui_line(&ui,8,64,"APPLYING ENTRY (RAM)");
                 painter.flip_page_later();bn::core::update();
                 int new_index=editor.target();
-                bool saved=editor.autosave() ?
-                    vocab_file_mutate(vf,editor.operation(),editor.target(),editor.row(),new_index) :
-                    vocab_file_defer(vf,editor.operation(),editor.target(),editor.row(),new_index);
-                bool installed=editor.autosave()?vocab_file_save_installed_index():saved;
+                bool saved=vocab_file_defer(vf,editor.operation(),editor.target(),editor.row(),new_index);
+                bool installed=saved;
                 if(installed)state.entry_committed(vf,new_index);
                 editor.finish(installed,vocab_file_last_error());
                 if(installed&&!saved)renderer.set_notice(vocab_file_last_error());
@@ -65,6 +68,13 @@ void run_entry_screen(Renderer& renderer,State& state,VocabFile& vf,const char* 
             if(editor.active())render_entry(editor,reinterpret_cast<uint8_t*>(painter.page().data()),ui_line,&ui);
             painter.flip_page_later();bn::core::update();
         }
+      }
+      bn::core::update();bn::core::update();
+      if(dictionary_requested){
+        DictionaryResult result;
+        if(run_dictionary_screen(renderer,&vf,result)&&dictionary_accept_pair(renderer,vf,result))
+            editor.prefill_add(result.front,result.back);
+      }
     }
     bn::core::update();bn::core::update();
     renderer.reset();

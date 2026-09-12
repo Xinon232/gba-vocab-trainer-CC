@@ -2,9 +2,10 @@
 
 class HomeScreen {
 public:
+    explicit HomeScreen(bool destination=false):page_(destination?Page::files:Page::home),destination_(destination){}
     enum class Page { home, files, new_list, confirm, controls, credits };
     enum class Key { a, b, up, down, left, right, select, start };
-    enum class Request { none, resume, load, create };
+    enum class Request { none, resume, load, create, dictionary };
     Page page() const { return page_; }
     int selection() const { return selection_; }
     int file_index() const { return file_index_; }
@@ -21,9 +22,10 @@ private:
     int help_page_ = 0;
     Request request_ = Request::none;
     bool save_first_ = false;
+    bool destination_ = false;
 };
 
-constexpr int HOME_HELP_PAGES = 22;
+constexpr int HOME_HELP_PAGES = 27;
 constexpr int HOME_CREDIT_PAGES = 5;
 const char* home_help_heading(int page);
 const char* home_help_line(int page, int line);
@@ -42,4 +44,4 @@ struct HomeActions {
 enum class HomeResult { opened, save_failed, open_failed };
 HomeResult home_apply_request(const HomeScreen&, HomeActions, const char* filename);
 // True after a successful switch; false when resuming the retained list.
-bool run_home_screen(Renderer&, VocabFile&, HomeActions);
+bool run_home_screen(Renderer&, VocabFile&, HomeActions, bool* dictionary_requested=nullptr, bool destination=false);

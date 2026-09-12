@@ -42,8 +42,8 @@ void render_entry(EntryEditor& e,uint8_t* px,EntryUiLine ui,void* context) {
     ui(context,8,0,e.heading());
     using S=EntryEditor::Screen;
     if(e.screen()==S::menu) {
-        const char* normal[]={"  Add entry","  Edit entry","  Delete entry",e.autosave()?"  Autosave: ON":"  Autosave: OFF"};
-        const char* selected[]={"> Add entry","> Edit entry","> Delete entry",e.autosave()?"> Autosave: ON":"> Autosave: OFF"};
+        const char* normal[]={"  Add entry","  Edit entry","  Delete entry","  Add from dictionary"};
+        const char* selected[]={"> Add entry","> Edit entry","> Delete entry","> Add from dictionary"};
         for(int i=0;i<4;++i)ui(context,24,30+i*24,e.selection()==i?selected[i]:normal[i]);
         ui(context,8,144,"Up/Down  A: Select  B: Back");
     } else if(e.screen()==S::confirm_delete) {

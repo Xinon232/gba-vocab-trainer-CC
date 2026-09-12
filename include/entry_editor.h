@@ -8,10 +8,15 @@ public:
     enum class Screen { closed, menu, front, back, confirm_delete };
     explicit EntryEditor(writer::Layout::Width measure) : measure_(measure) {}
     void open(int target, const char* raw);
+    bool prefill_add(const char* front,const char* back);
+    void open_lookup();
+    enum class LookupAction { none, up, down, direction, chooser, select, cancel };
+    LookupAction take_lookup_action() {auto a=lookup_action_;lookup_action_=LookupAction::none;return a;}
+    bool take_dictionary_request() {bool r=dictionary_request_;dictionary_request_=false;return r;}
     void frame(uint16_t held);
     void finish(bool committed, const char* error);
     Screen screen() const { return screen_; }
-    bool autosave() const { return autosave_; }
+    bool autosave() const { return false; }
     bool active() const { return screen_ != Screen::closed; }
     int selection() const { return selection_; }
     int target() const { return target_; }
@@ -42,7 +47,9 @@ private:
     EntryMutation operation_ = EntryMutation::add;
     uint16_t previous_ = 0;
     bool wait_release_ = true, commit_ = false, status_visible_ = true;
-    bool autosave_ = false; // RAM-only, reset by construction every startup.
+    bool dictionary_request_=false,lookup_=false;
+    LookupAction lookup_action_=LookupAction::none;
+    uint16_t lookup_once_=0;
     bool provisional_ = false, provisional_dirty_ = false;
     std::size_t provisional_end_ = 0;
     int selection_ = 0, target_ = -1, viewport_ = 0;

@@ -36,7 +36,7 @@ int main(int argc,char**argv) {
     assert(all.find("flashcards")!=std::string::npos);
     assert(all.find("/gbavocab")!=std::string::npos);
     assert(all.find("Start+Select")!=std::string::npos);
-    assert(all.find("Autosave")!=std::string::npos);
+    assert(all.find("Add from dictionary")!=std::string::npos);
     // Both press orders must be explained by the actual ROM help strings.
     for(const char* required : {"Hold Select, then type", "Keep exact direction held,",
             "L if used, and producing", "B/A/R held; then Select.",

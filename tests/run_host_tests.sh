@@ -99,4 +99,5 @@ gcc -std=c11 -Wall -Wextra -Wno-discarded-qualifiers -Wno-old-style-declaration 
 bash tests/run_home_tests.sh
 bash tests/run_select_accent_tests.sh
 python3 tests/test_select_accent_docs.py
+bash tests/run_dictionary_tests.sh
 printf '\nPASS all host suites (production FatFS adapter included)\n'

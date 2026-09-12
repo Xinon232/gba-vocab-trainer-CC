@@ -18,6 +18,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include "pair_metadata.h"
 
 // Hard cap on lines in a .txt file. Text remains on the SD card; only
 // offsets, fields, and dirty flags are kept in EWRAM.
@@ -46,6 +47,7 @@ struct LineBuf {
 // known at compile time and there's no risk of malloc failure on
 // the GBA.
 struct VocabFile {
+    PairMetadata languages;
     // 10,000 entries × 4 bytes = 40KB
     uint32_t line_offsets[VOCAB_MAX_LINES];
 
@@ -68,6 +70,7 @@ struct VocabFile {
     uint32_t array_generation;
 
     void reset() {
+        languages = PairMetadata();
         rejected_rows = 0;
         line_count = 0;
         loaded = false;

@@ -14,6 +14,7 @@
 #include "entry_shortcuts.h"
 #include "entry_screen.h"
 #include "home_screen.h"
+#include "dictionary_screen.h"
 
 #include "common_variable_8x16_sprite_font.h"
 
@@ -116,10 +117,23 @@ static void open_home(Renderer& renderer, State& state)
     HomeActions actions{&state, home_save,
         [](void*, const char* filename) { return load_selected_vocab(filename); },
         [](void*, const char* filename) { return vocab_file_create(filename, g_vocab_file); }};
-    if (run_home_screen(renderer, g_vocab_file, actions)) {
-        state = State(); // Only a successful load/create replaces navigation.
-        renderer.set_notice(nullptr);
-        renderer.set_save_status(SaveStatus::IDLE);
+    while(true) {
+        bool dictionary_requested=false;
+        if (run_home_screen(renderer, g_vocab_file, actions, &dictionary_requested)) {
+            state = State(); // Only a successful load/create replaces navigation.
+            renderer.set_notice(nullptr);
+            renderer.set_save_status(SaveStatus::IDLE);
+        }
+        if(!dictionary_requested)break;
+        DictionaryResult result;
+        if(run_dictionary_screen(renderer,nullptr,result)) {
+            // Existing guarded browser owns Save/Discard/Cancel before switching.
+            if(run_home_screen(renderer, g_vocab_file, actions, nullptr, true)) {
+                state=State();
+                if(dictionary_accept_pair(renderer,g_vocab_file,result))
+                    run_entry_screen(renderer,state,g_vocab_file,g_builtin_vocab,g_builtin_vocab_used,result.front,result.back);
+            }
+        }
     }
 }
 

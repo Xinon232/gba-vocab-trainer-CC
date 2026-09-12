@@ -7,3 +7,7 @@ build/
 *.gba
 *.zip
 .DS_Store
+__pycache__/
+builder-dist/
+*.spec
+core

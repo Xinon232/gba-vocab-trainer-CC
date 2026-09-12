@@ -1,10 +1,10 @@
-# gbavocab V1.5 — full controls
+# gbavocab V1.6 — full controls
 
 Learn vocabulary using flashcards and five learning boxes. Create and edit your own word lists on your Game Boy Advance.
 
 Put UTF-8 TXT vocabulary files in `/gbavocab` at the SD-card root, for example `/gbavocab/Spanish.txt`. Each entry uses a word, a TAB character, and its translation. Optional additional columns are preserved. Files elsewhere on the card are not the list library.
 
-V1.5 matches writer v1.2.0 letter groups and keeps existing fonts, learning and TXT storage. The separate `sample file.txt` has 20 English–Spanish entries, four in each box. Copy it into `/gbavocab`; it is not built into the app.
+V1.6 matches writer v1.2.0 letter groups and keeps existing fonts, learning and TXT storage. The separate `sample file.txt` has 20 English–Spanish entries, four in each box. Copy it into `/gbavocab`; it is not built into the app.
 
 Author: Halim Jarrar
 
@@ -12,9 +12,9 @@ Author: Halim Jarrar
 
 Use a compatible SuperFW / Supercard SD-style setup. Copy the runnable `gbavocab.gba` release ROM to your card and launch it with your firmware. Source builds produce the same `gbavocab.gba` filename. Back up your vocabulary TXT files before using any application that edits them.
 
-The home screen reads `gbavocab V1.5` and `files: /gbavocab`. There is no built-in vocabulary, demo list or automatic fallback. Missing storage is reported; Controls and Credits remain available even without a list.
+The home screen reads `gbavocab V1.6` and `files: /gbavocab`. There is no built-in vocabulary, demo list or automatic fallback. Missing storage is reported; Controls and Credits remain available even without a list.
 
-- Up / Down: choose LOAD LIST or NEW LIST. LOAD LIST is first and selected by default.
+- Up / Down: choose LOAD LIST, NEW LIST or LOCAL DICTIONARY. LOAD LIST is first and selected by default.
 - A: open the selected action.
 - B on home: resume the active list, if one is open.
 - Select on home, LOAD LIST or NEW LIST: open Controls.
@@ -62,7 +62,7 @@ Release the opening buttons before using the next screen. Learning shortcuts are
 
 ### Saving learning progress
 
-Grading and shuffling affect the active list in memory. Entry Autosave is not an independent learning-progress autosave switch. Use learning Start to save before powering off; an Autosave ON entry confirmation also includes already-pending learning changes. Wait for saving to finish. A failure is not a successful save: retain the session and recovery files and resolve the storage problem.
+Grading, shuffling and confirmed entry edits affect the active list in memory. There is no autosave toggle. Use learning Start to save all changes before powering off. Wait for saving to finish. A failure is not a successful save: retain the session and recovery files and resolve the storage problem.
 
 <!-- PAGEBREAK -->
 
@@ -70,8 +70,8 @@ Grading and shuffling affect the active list in memory. Entry Autosave is not an
 
 From a loaded list, press Start + Select. The menu captures the currently displayed entry for Edit and Delete. An empty box has no editable selected entry, but Add remains available.
 
-- Up / Down: choose Add entry, Edit entry, Delete entry, or Autosave in that order.
-- A: open the selected operation; on Autosave, toggle OFF / ON.
+- Up / Down: choose Add entry, Edit entry, Delete entry, or Add from dictionary in that order.
+- A: open the selected operation.
 - B: return to learning.
 
 ### Add and Edit: two separate field drafts
@@ -79,7 +79,7 @@ From a loaded list, press Start + Select. The menu captures the currently displa
 Step 1/2 is Word / front. Step 2/2 is Translation / back. Add starts with empty drafts; Edit prefills the captured entry's two fields, with the caret initially at the end. Additional columns are kept outside the drafts.
 
 - Hold Start and press A in step 1: advance to step 2. The first field must contain text.
-- Hold Start and press A in step 2: confirm both fields together. This applies or saves according to Autosave; it is not a save on every keystroke.
+- Hold Start and press A in step 2: confirm both fields together. This applies the entry in RAM only; manually save from learning to persist it.
 - Hold Start and press B in step 2: return to step 1, keeping both drafts.
 - Hold Start and press B in step 1: cancel back to the entry menu without changing the active entry or TXT. Starting Add/Edit again begins fresh drafts.
 
@@ -89,13 +89,11 @@ A confirmed Add goes at the top of Box 1. Edit keeps the captured entry's identi
 
 The confirmation shows the captured word and translation and asks “Are you sure?”. No is selected initially. Left / Right switches No / Yes; Up / Down does not choose an answer. A on Yes confirms deletion; A on No or B cancels to the entry menu. Deleting the final entry leaves an empty, usable TXT that can receive new entries.
 
-### Autosave: exact session behavior
+### Add from dictionary and manual save
 
-Autosave is OFF on every app start. Its toggle is RAM-only, below Delete entry, and survives entry-menu visits and list changes for the rest of that session. It is not written to a settings file.
+Add from dictionary opens the matching local dictionary, or a chooser when several match. If this list has no language footer, choose a dictionary and confirm FRONT/BACK languages first; Left/Right swaps them. The pair remains in RAM until the next manual save. A canceled lookup leaves the captured entry unchanged. See page 8 for search controls.
 
-OFF: confirmed additions, edits and deletions immediately affect the active in-memory list, but cause zero TXT rewrites. Learning Start manually writes all pending changes plus learning boxes. The Save choice when switching lists can also flush them.
-
-ON: the next confirmed addition, edit or deletion saves all pending changes together with that new mutation. Merely switching ON does not flush anything. Typing and canceled drafts never save. An uncommitted failure keeps the draft / active data; if installation completed but a later reopen failed, the app reports the error without offering a duplicate Add retry.
+Selecting a result prefills a NEW two-step Add draft, never Edit. You may change either field and confirm or cancel normally. Confirmed additions, edits and deletions affect the active in-memory list with zero TXT rewrites. Learning Start manually writes pending entries, language metadata and learning boxes. The Save choice when switching lists can also flush them.
 
 <!-- PAGEBREAK -->
 
@@ -174,7 +172,7 @@ Typing chords provide Latin letters and accents, not an Arabic keyboard. For imp
 
 Both editable fields must contain nonblank text. Each draft buffer holds at most 189 UTF-8 bytes, but the confirmed entire row has a shared limit of 191 content bytes including the TAB and all additional columns. Accented and other non-ASCII characters can use multiple bytes. Two individually valid drafts may exceed the combined row limit; shorten them before confirming. The list limit is 10,000 entries.
 
-With Autosave OFF, RAM holds up to 128 concurrently added or edited rows. Editing an already-pending row reuses its slot. Deleting consumes no slot and frees a slot if that row had one. This is not a limit of 128 button presses or total lifetime changes. At capacity, a new pending row is rejected with “RAM FULL - save list first”; the draft is retained and the active list is not changed.
+RAM holds up to 128 concurrently added or edited rows. Editing an already-pending row reuses its slot. Deleting consumes no slot and frees a slot if that row had one. This is not a limit of 128 button presses or total lifetime changes. At capacity, a new pending row is rejected with “RAM FULL - save list first”; the draft is retained and the active list is not changed.
 
 Manual save is available in learning, not inside a draft. If RAM is full, note the rejected draft text before using Start+B to return / cancel, leave the editor with B, then press and release Start in learning. After a successful save, reopen the editor and re-enter that unconfirmed draft. Canceling and reopening does not preserve draft text.
 
@@ -182,9 +180,9 @@ Invalid, overlong or excess imported rows make the source read-only with a warni
 
 ### How the TXT stores progress
 
-Manual learning saves and saves containing pending learning / entry changes use the existing grouped CRLF format. Rows are grouped into Boxes 1–5; exactly one empty physical line separates each pair of boxes, including empty first or middle boxes (four separators total). The app writes no metadata rows, new columns or footers. Reopening the TXT restores those box memberships.
+Manual learning saves and saves containing pending learning / entry changes use the existing grouped CRLF format. Rows are grouped into Boxes 1–5; exactly one empty physical line separates each pair of boxes, including empty first or middle boxes (four separators total). An optional final language-pair footer is preserved once on manual save. It is not a vocabulary entry or box separator. Reopening restores box memberships and the language pair.
 
-An immediate Autosave ON mutation on a clean list instead splices the affected row while preserving unrelated physical bytes, separators, whitespace, mixed LF/CRLF endings and an unterminated final line. Add uses the first observed newline convention, or CRLF if there is none. Once pending changes require the grouped save path, its established newline / box normalization applies.
+V1.6 entry confirmations are RAM-only. Manual saving uses the established grouped-save normalization of newlines and boxes. The underlying transaction retains its checked write, sync, rename, validation and recovery architecture.
 
 No permanent `.sav`, settings or sidecar files. Temporary `name.txt.gbv1.tmp` / `.bak` / `.txn` files use slots 1–9. Keep recovery files after errors; back up before manual recovery. Keep TXT backups; never remove power/card during saving or externally edit/swap the loaded source. Filenames over 54 bytes need PC renaming before saving. Saves check writes and scan the installed TXT, without independent full-original rereads or pre-install row comparison. Same-size external edits can escape detection; recovery/atomicity is not guaranteed. Four injected-error cases left orphan space despite content/retry passes; see `docs/file-io-simple-save.md`.
 
@@ -221,3 +219,51 @@ License: https://creativecommons.org/licenses/by/4.0/
 For this app the supplied TTF's actual unencoded GSUB initial, medial, final and lam-alef glyphs were extracted as monochrome ROM bitmap tables at 11 pixels. This conversion, display-only mark filtering and punctuation/digit fallbacks are app changes, not a modified font endorsed by the author. SuperFW remains the font for Latin, numbers and ordinary punctuation. The source font hash and reproducible extractor are included in the local source and evidence.
 
 Test backed-up copies of the supplied lists on your actual SD card and firmware. Emulator/RAM-fixture checks do not verify real Supercard storage or physical-device readability.
+
+<!-- PAGEBREAK -->
+
+## 8. LOCAL DICTIONARY: search and add
+
+Dictionaries live in the ROM and can be searched without an SD card. The supplied template has none: use the PC builder with your own legally obtained exports. A single dictionary opens directly; multiple dictionaries show a chooser. Up/Down selects a dictionary, A opens it and B cancels. Entry-editor lookup only offers dictionaries matching the list's language pair in either orientation. No match gives an explanatory message, not an unrelated default.
+
+Type using the same letter, accent, punctuation and case controls as the entry drafts. Results update as a prefix is entered; searching never scans the whole dictionary. Both directions have PC-built sorted indexes. ASCII A–Z match a–z; other Unicode characters, accents, spacing and punctuation match exactly. Matching is not fuzzy, substring, accent-insensitive or Unicode-normalized. Multiword fields stay intact.
+
+- Hold Start + Up / Down to move through results and scroll. Hold continues moving on the inherited navigation-repeat schedule. Two word/translation pairs are visible at once; long preview lines are clipped, but selecting retains the full fields.
+- Hold Start and press A: select the highlighted word/translation pair. Empty results cannot be selected.
+- Release Start to resume normal typing. Release the companion key before starting a fresh letter chord so release tails cannot type unwanted characters.
+- Start + Left / Right: move the query caret by a logical UTF-8 character. The query display follows its current wrapped row.
+- Start + L: toggle search direction for the current dictionary once per L press. It does not change the list's FRONT/BACK orientation.
+- Start + R: open the dictionary chooser; one available dictionary stays current. B in a reopened chooser returns to the same query/dictionary; changing dictionary retains the query.
+- Start + B: cancel lookup. B alone still deletes a character. Release Select before Start shortcuts, just as in drafts.
+
+From Entry editor, a selected pair opens a NEW two-step Add draft in the active list. From home LOCAL DICTIONARY, select a result and then an existing destination TXT in LOAD LIST. The normal Save/Discard/Cancel guard protects any dirty active list. B in that destination picker cancels without switching. A mismatched destination pair is explained rather than silently reversing or replacing its metadata. To use a new destination, create it from home first.
+
+### Optional list language footer
+
+The exact final-line syntax is `# gbavocab: front=en; back=de`. Each code has 1–11 lowercase ASCII letters, digits or hyphens, starts with a letter, and the two codes must differ. There are no extra spaces or fields beyond those shown. LF and CRLF endings and an unterminated final footer are accepted. Blank lines may follow it; another nonempty line or a duplicate/malformed footer makes the list read-only to avoid dropping unseen data.
+
+The identifiers describe the two TXT columns, not a ROM-specific dictionary ID. Either internal dictionary orientation and either search direction map into the correct list columns. Without a footer, first Add from dictionary asks for a dictionary and FRONT/BACK pair before search. Confirmed pair metadata stays in RAM, even if the later draft is canceled, until manual save or discard. Remove only the footer line on your PC before loading the list to reset its pair. The TXT remains plain UTF-8; there is no permanent sidecar or GBA save file. Older app versions may treat this footer as a rejected row: remove it before using them.
+
+<!-- PAGEBREAK -->
+
+## 9. PC dictionary ROM builder
+
+Windows: extract the entire builder ZIP, then run `gbavocab-builder.exe` inside its folder. Keep the accompanying `_internal` files beside it. No Python installation or GBA development toolchain is needed. The executable is unsigned; Windows may show an unrecognized-app warning. Obtain it only from a trusted release and compare its published hash.
+
+Linux: extract the Linux builder ZIP, mark `gbavocab-builder` executable if necessary, and launch it from a graphical desktop. Keep `_internal` beside it. The packaged build targets modern x86-64 glibc Linux. Alternatively run `python3 builder/app.py` with Python 3.11+, Tk installed and the provided `builder/template.gba`; no GBA compiler is required.
+
+1. Choose Add export and select your own dict.cc-style UTF-8 TXT/TSV file.
+
+2. Enter a unique dictionary name, language identifiers (for example en / de), and labels (English / German). The first language describes the export's first column, not necessarily the list front you will later choose. Repeat for more dictionaries; Remove selected removes an import before building.
+
+3. Choose Build .gba, pick an output filename, and wait for indexing, fit checking and readback verification. Copy the generated ROM to the flashcard. Your learning TXT lists still belong in `/gbavocab` on the SD card.
+
+### Import and capacity rules
+
+The first two TAB-separated columns are preserved without splitting words or stripping field spaces. Optional additional dict.cc columns are ignored for dictionary lookup. UTF-8 BOM, LF/CRLF, comments beginning with #, blank and decorative box/separator lines are tolerated. Invalid UTF-8, missing/blank fields and overlong rows produce a line-numbered error rather than silent truncation. No copyrighted dictionary is bundled; automated capacity tests generate clearly synthetic vocabulary.
+
+Up to 16 named dictionaries may be installed. Names use at most 31 UTF-8 bytes; language labels at most 23. An editable pair has at most 191 UTF-8 bytes including its TAB. Dictionaries are not limited to the learning list's 10,000 entries: 40,000+ dictionary entries are supported through ROM-resident tables and bounded query/result RAM.
+
+The hard cartridge ceiling is 32 MiB including the base application, both directional indexes, descriptors and strings. Each entry uses 16 index/record bytes plus the two UTF-8 strings and their two NUL terminators; each dictionary adds a 120-byte descriptor and up to three alignment bytes. The payload adds a 16-byte header. Exact capacity depends on text lengths and the template size. The builder reports the actual bytes and rejects an oversized output before replacing it. A 40,010-entry synthetic dictionary is a capacity check, not a claim that every export of any size fits.
+
+The GUI reads exports into PC memory; very large files may take time or exceed available desktop RAM before the ROM fit check. The generated ROM needs no PC files or SD dictionary index at runtime. This version does not download dictionaries, bypass export licensing, or modify input exports.

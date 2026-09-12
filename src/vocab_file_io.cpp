@@ -1272,6 +1272,11 @@ static bool write_sd_grouped_temp(const VocabFile& vf, const char* tmp_name, boo
         }
         if (field < 5 && ok && !writer.append("\r\n", 2)) ok = false;
     }
+    if (!s_entry_direct) {
+        char footer[64];int length=vf.languages.format(footer);
+        if(ok && length && !writer.append(footer,length))ok=false;
+        s_reindex_scratch.languages=vf.languages;
+    }
     if (ok && !writer.flush()) ok = false;
     if (ok && tracked_sync(&out) != FR_OK) ok = false;
     if (tracked_close(&in) != FR_OK) ok = false;
@@ -1296,6 +1301,7 @@ static bool validate_replacement(const char* replacement,
     FatFsSequentialSource readback(new_file);
     int expected_box = 1, expected_i = 0;
     uint32_t rejected = 0;
+    PairMetadata readback_languages;
     ++s_io_stats.index_scans;
     int loaded = vocab_scan_visit(readback,
         [&](int rank, uint32_t offset, int box, const char*, int) {
@@ -1311,8 +1317,9 @@ static bool validate_replacement(const char* replacement,
                 actual.field[rank] != box || actual.line_offsets[rank] != offset) return false;
             ++expected_i;
             return true;
-        }, rejected);
+        }, rejected, &readback_languages);
     bool ok = loaded == expected.line_count && !rejected && !readback.failed() &&
+        readback_languages.same(expected.languages) && actual.languages.same(expected.languages) &&
         readback.identity().size == f_size(&new_file) && same_identity(readback.identity(), identity);
     if (tracked_close(&new_file) != FR_OK) ok = false;
     return ok;

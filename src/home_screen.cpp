@@ -9,9 +9,9 @@ constexpr TextPage help[HOME_HELP_PAGES] = {
     {"Learning", {"Hold R: reveal answer.", "A: correct, next box.", "B: wrong, back to Box 1.", "Hold A/B: keep feedback.", "Left/Right: boxes 1-5.", "Up: undo in the same box."}},
     {"Learning / feedback", {"Hold A/B: keep both cards.", "Same green/red background.", "Release: 24 frames more.", "About 0.4 sec, then next.", "Holding uses no delay time.", "One judgment per press."}},
     {"Learning / shortcuts", {"Down: shuffle current box.", "Then A: yes; B: cancel.", "L: front, back, alternating.", "Start alone: save on release.", "Select alone: home on release.", "Start+Select: Entry editor."}},
-    {"Entry menu", {"Up/Down: choose; A: open.", "Add, Edit, Delete, Autosave.", "B: return to learning.", "Delete: Left/Right No/Yes;", "A: confirm; B: cancel.", "Add goes first in Box 1."}},
+    {"Entry menu", {"Up/Down: choose; A: open.", "Add, Edit, Delete entries.", "B: return to learning.", "Delete: Left/Right No/Yes;", "A: confirm; B: cancel.", "Add goes first in Box 1."}},
     {"Entry drafts", {"1/2: word; 2/2: translation.", "Start+A: next, then confirm.", "Start+B: previous draft;", "from 1/2: cancel changes.", "Edit keeps box and progress.", "Both fields must have text."}},
-    {"Saving entries", {"Autosave OFF each startup.", "OFF: changes stay in RAM.", "Learning Start: save all.", "ON: save confirmed changes.", "No saving each keystroke.", "Save before powering off."}},
+    {"Saving entries", {"Manual save; no autosave.", "Changes stay in RAM.", "Learning Start: save all.", "Pair footer saved with list.", "No saving each keystroke.", "Save before powering off."}},
     {"Typing letters", {"Hold a direction, then", "B/A/R: letter 1/2/3.", "Up: abc    Right: hij", "Down: nop  Left: tuw", "Hold Right, tap R twice: g.", "Keep Right held for both."}},
     {"Typing / L layer", {"Hold L and a direction:", "Up: def    Right: klm", "Down: qrs  Left: xyz", "B/A/R: letter 1/2/3.", "Hold Left, tap R twice: v.", "Keep Left held; no L layer."}},
     {"Spaces / case", {"A alone: space; B: delete.", "Hold alone to repeat A/B.", "Normal: short R release", "arms one-shot Shift.", "Hold R alone 48 frames:", "Caps while held (~0.8 sec)."}},
@@ -24,7 +24,12 @@ constexpr TextPage help[HOME_HELP_PAGES] = {
     {"Caret / status", {"Start+Left/Right: caret.", "Start+Up/Down: visual row.", "Start+L/R: previous/next page.", "Start+Select: toggle status.", "Only NEW Select insertion", "is removed; converted stays."}},
     {"Typing / limits", {"Start+Select: toggle status.", "Start alone: no newline.", "No tabs or newlines in fields.", "191 UTF-8 bytes per row", "including tab / extra columns.", "10,000 entries per list."}},
     {"Imported Arabic", {"Ghoulam contextual letters.", "Arabic runs read right to left.", "Latin and digits stay LTR.", "Harakat hidden, bytes kept.", "Arabic comma displays as ,", "Missing artwork displays ?."}},
-    {"Arabic / editing", {"Import Arabic in either field.", "No Arabic typing layout.", "Caret uses logical UTF-8.", "Left/Right: previous/next", "character, not visual order.", "Rows and caret are shaped."}}
+    {"Arabic / editing", {"Import Arabic in either field.", "No Arabic typing layout.", "Caret uses logical UTF-8.", "Left/Right: previous/next", "character, not visual order.", "Rows and caret are shaped."}},
+    {"Local dictionary", {"Home: LOCAL DICTIONARY.", "ROM dictionaries need no SD.", "Build ROM with PC builder.", "Windows EXE or Linux app.", "Use your own UTF-8 exports.", "40,000+ entries supported."}},
+    {"Dictionary / search", {"Type to see prefix matches.", "Hold Start+Up/Down: results.", "Start+A: select a pair.", "Start+B: return / cancel.", "Release Start: keep typing.", "Start+Left/Right: caret."}},
+    {"Dictionary / direction", {"Start+L: search direction.", "Start+R: dictionary chooser.", "One dictionary: opens direct.", "Up/Down, A: choose; B: back.", "ASCII case is ignored.", "Other Unicode matches exactly."}},
+    {"Dictionary / add", {"Add from dictionary", "prefills a NEW entry draft.", "Edit either field, then apply.", "Home lookup: choose TXT next.", "Dirty list: Save/Discard/Cancel.", "Manual save persists changes."}},
+    {"Dictionary / list pair", {"First use: choose list pair.", "Left/Right: swap; A: accept.", "Pair stays in RAM until save.", "TXT footer stores front/back.", "Only matching pairs are shown.", "Remove footer on PC to reset."}}
 };
 constexpr TextPage credits[HOME_CREDIT_PAGES] = {
     {"Credits / author", {"Made by Halim Jarrar", "(C) 2026", "halim-jarrar.de", "monday@halim-jarrar.de", "", ""}},
@@ -63,11 +68,15 @@ void HomeScreen::press(Key key, bool active, bool dirty, int count) {
     }
     if(page_ == Page::home) {
         if(key == Key::b && active) request_ = Request::resume;
-        else if(key == Key::up || key == Key::down) selection_ ^= 1;
-        else if(key == Key::a) page_ = selection_ ? Page::new_list : Page::files;
+        else if(key == Key::up) selection_=(selection_+2)%3;
+        else if(key == Key::down) selection_=(selection_+1)%3;
+        else if(key == Key::a) {
+            if(selection_==2)request_=Request::dictionary;
+            else page_ = selection_ ? Page::new_list : Page::files;
+        }
         return;
     }
-    if(key == Key::b) { page_ = Page::home; return; }
+    if(key == Key::b) { if(destination_)request_=Request::resume;else page_ = Page::home; return; }
     if(page_ == Page::files) {
         if(key == Key::up) --file_index_;
         if(key == Key::down) ++file_index_;
@@ -146,13 +155,14 @@ void home_draw(HomePainter& p,const HomeScreen& h,const VocabFile& vf,const char
         return;
     }
     if(h.page()==Page::home) {
-        p.ui(8,0,"gbavocab V1.5");
+        p.ui(8,0,"gbavocab V1.6");
         p.ui(8,20,"files: /gbavocab");
         p.ui(24,48,h.selection()==0?"> LOAD LIST":"  LOAD LIST");
         p.ui(24,72,h.selection()==1?"> NEW LIST":"  NEW LIST");
+        p.ui(24,96,h.selection()==2?"> LOCAL DICTIONARY":"  LOCAL DICTIONARY");
         if(vf.loaded) p.ui(8,120,"B: Resume active list");
-        else if(!vocab_file_sd_ready()) p.body(8,100,"No SD card / storage unavailable.");
-        else if(!vocab_file_count()) p.body(8,100,"Put TXT lists in /gbavocab.");
+        else if(!vocab_file_sd_ready()) p.body(8,120,"No SD card / storage unavailable.");
+        else if(!vocab_file_count()) p.body(8,120,"Put TXT lists in /gbavocab.");
     } else if(h.page()==Page::files) {
         p.ui(8,0,"LOAD LIST");
         if(!vocab_file_sd_ready()) p.body(8,32,"No SD card / storage unavailable.");
@@ -186,7 +196,8 @@ void home_draw(HomePainter& p,const HomeScreen& h,const VocabFile& vf,const char
 }
 }
 
-bool run_home_screen(Renderer& renderer,VocabFile& vf,HomeActions actions) {
+bool run_home_screen(Renderer& renderer,VocabFile& vf,HomeActions actions,bool* dictionary_requested,bool destination) {
+    if(dictionary_requested)*dictionary_requested=false;
     renderer.reset();bn::core::update();bn::core::update();
     bool switched=false;
     {
@@ -199,7 +210,7 @@ bool run_home_screen(Renderer& renderer,VocabFile& vf,HomeActions actions) {
         generator.set_palette_item(bn::sprite_items::ui_variable_8x16_font.palette_item());
         generator.set_left_alignment();
         HomePainter p{generator,{}};
-        HomeScreen h;
+        HomeScreen h(destination);
         char new_name[VOCAB_FILENAME_MAX]={};
         char message[80]={};
         bool wait_release=true;
@@ -230,6 +241,10 @@ bool run_home_screen(Renderer& renderer,VocabFile& vf,HomeActions actions) {
                 redraw=true;
             auto request=h.request();
             if(request==HomeScreen::Request::resume) done=true;
+            else if(request==HomeScreen::Request::dictionary) {
+                if(dictionary_requested)*dictionary_requested=true;
+                done=true;
+            }
             else if(request==HomeScreen::Request::load || request==HomeScreen::Request::create) {
                 // Capture filename before any storage operation can refresh discovery.
                 char target[VOCAB_FILENAME_MAX];

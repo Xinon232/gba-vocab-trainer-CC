@@ -5,10 +5,11 @@
 // sees each accepted raw row while it is still in bounded scanner scratch.
 // Returning false aborts with -1; I/O failure remains the Source's contract.
 template<class Source, class Visitor>
-int vocab_scan_visit(Source& source, Visitor&& visit, uint32_t& rejected)
+int vocab_scan_visit(Source& source, Visitor&& visit, uint32_t& rejected, PairMetadata* languages = nullptr)
 {
     rejected = 0;
     int count = 0, box = 1;
+    bool footer = false;
     char row[VOCAB_RAW_LINE_MAX + 1];
     while (true) {
         int length = 0;
@@ -25,6 +26,13 @@ int vocab_scan_visit(Source& source, Visitor&& visit, uint32_t& rejected)
         if (length && row[length - 1] == '\r') --length;
         if (overflow || length >= VOCAB_RAW_LINE_MAX) { ++rejected; continue; }
         row[length] = 0;
+        if (footer) { if(length) ++rejected; continue; }
+        if (PairMetadata::starts(row,"# gbavocab:")) {
+            PairMetadata parsed;
+            if (!parsed.parse(row)) { ++rejected; continue; }
+            if(languages) *languages = parsed;
+            footer = true; continue;
+        }
         if (!length) { if (box < 5) ++box; continue; }
         if (!vocab_validate_raw_row(row, length)) { ++rejected; continue; }
         if (count == VOCAB_MAX_LINES) { ++rejected; continue; }
@@ -44,7 +52,7 @@ int vocab_scan(Source& source, VocabFile& vf)
             vf.field[i] = uint8_t(box);
             ++vf.field_counts[box - 1];
             return true;
-        }, vf.rejected_rows);
+        }, vf.rejected_rows, &vf.languages);
     vf.loaded = vf.line_count > 0;
     return vf.line_count;
 }

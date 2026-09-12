@@ -4,6 +4,7 @@ namespace {
 constexpr uint16_t bit(writer::Button b) { return 1u << unsigned(b); }
 }
 void EntryEditor::open(int target, const char* raw) {
+    lookup_=false;dictionary_request_=false;lookup_action_=LookupAction::none;
     target_ = target;
     captured_[0] = 0;
     if (raw && std::strlen(raw) < sizeof(captured_)) std::strcpy(captured_, raw);
@@ -11,6 +12,17 @@ void EntryEditor::open(int target, const char* raw) {
     message_ = "";
     commit_ = false;
     change(Screen::menu);
+}
+bool EntryEditor::prefill_add(const char* front,const char* back) {
+    if(std::strlen(front)+std::strlen(back)+1>=sizeof(row_) ||
+       !writer::valid_utf8(front,std::strlen(front)) || !writer::valid_utf8(back,std::strlen(back)) ||
+       std::strlen(front)>writer::TEXT_CAPACITY || std::strlen(back)>writer::TEXT_CAPACITY)return false;
+    drafts_[0].set_text(front);drafts_[1].set_text(back);suffix_[0]=0;
+    operation_=EntryMutation::add;commit_=false;lookup_=false;message_="";
+    change(Screen::front);return true;
+}
+void EntryEditor::open_lookup() {
+    open(-1,nullptr);prefill_add("","");lookup_=true;
 }
 void EntryEditor::change(Screen screen) {
     screen_ = screen;
@@ -53,6 +65,7 @@ void EntryEditor::finish(bool committed, const char* error) {
     else { wait_release_ = true; input_.reset_transient(); }
 }
 void EntryEditor::frame(uint16_t held) {
+    lookup_once_ &= held;
     clock_.tick(held != previous_);
     auto pressed = held & ~previous_;
     previous_ = held;
@@ -71,7 +84,7 @@ void EntryEditor::frame(uint16_t held) {
         if (pressed & bit(writer::Button::UP)) selection_ = (selection_ + 3) % 4;
         if (pressed & bit(writer::Button::DOWN)) selection_ = (selection_ + 1) % 4;
         if ((pressed & bit(writer::Button::A)) && selection_ == 3) {
-            autosave_ = !autosave_; message_ = ""; return;
+            dictionary_request_=true;wait_release_=true;message_="";return;
         }
         if ((pressed & bit(writer::Button::A)) && selection_ == 2) {
             if (target_ < 0 || !captured_[0]) {message_ = "NO SELECTED ENTRY"; return;}
@@ -113,6 +126,21 @@ void EntryEditor::frame(uint16_t held) {
 void EntryEditor::consume(writer::InputEvent e) {
     if (wait_release_ || commit_) return;
     using K = writer::EventKind;
+    if(lookup_) {
+        switch(e.kind) {
+        case K::SAVE:lookup_action_=LookupAction::select;return;
+        case K::SAVE_MENU:lookup_action_=LookupAction::cancel;return;
+        case K::MOVE_UP:lookup_action_=LookupAction::up;return;
+        case K::MOVE_DOWN:lookup_action_=LookupAction::down;return;
+        case K::PAGE_PREV:
+            if(!(lookup_once_&bit(writer::Button::L)))lookup_action_=LookupAction::direction;
+            lookup_once_|=bit(writer::Button::L);return;
+        case K::PAGE_NEXT:
+            if(!(lookup_once_&bit(writer::Button::R)))lookup_action_=LookupAction::chooser;
+            lookup_once_|=bit(writer::Button::R);return;
+        default:break;
+        }
+    }
     clock_.tick(true);
     bool edit = false, ok = true;
     switch (e.kind) {

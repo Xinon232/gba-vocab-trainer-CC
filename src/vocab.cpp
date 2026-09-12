@@ -529,7 +529,10 @@ int vocab_export_grouped(const VocabFile& vf, const char* data, int data_len,
             out_buf[written++] = '\n';
         }
     }
-    return written;
+    char footer[64];int footer_length=vf.languages.format(footer);
+    if(footer_length>out_buf_len-written)return -1;
+    std::memcpy(out_buf+written,footer,footer_length);
+    return written+footer_length;
 }
 
 // --------------------------------------------------------------------
