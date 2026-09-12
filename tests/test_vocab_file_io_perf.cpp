@@ -119,7 +119,8 @@ int main()
 {
     if (test_transaction_failures()) return 1;
     if (test_structural_validator()) return 1;
-    if (sizeof(VocabFile) > 51300) {
+    // Legacy migration byte span + pair dirty/blocked flags add 12 bounded bytes.
+    if (sizeof(VocabFile) > 51312) {
         return fail("VocabFile still contains obsolete per-file line scratch");
     }
 

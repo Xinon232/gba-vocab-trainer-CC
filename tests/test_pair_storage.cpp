@@ -21,10 +21,10 @@ int main(){
  assert(v.languages.present());
  assert(vocab_file_load("cards.txt",v,fallback,sizeof fallback,used));
  assert(v.languages.present()&&!v.rejected_rows&&v.line_count==2);
- auto saved=read();auto pos=saved.find("# gbavocab:");assert(pos!=std::string::npos&&saved.find("# gbavocab:",pos+1)==std::string::npos);
+ auto saved=read();assert(saved.find("# gbavocab:")==std::string::npos);
  assert(vocab_file_defer(v,EntryMutation::remove,0,nullptr,result));assert(vocab_file_defer(v,EntryMutation::remove,0,nullptr,result));
  assert(vocab_file_save_grouped(v,fallback,used,out,sizeof out,written));
  assert(vocab_file_load("cards.txt",v,fallback,sizeof fallback,used));assert(v.loaded&&v.line_count==0&&v.languages.present());
- for(auto& p:std::filesystem::directory_iterator(fat_root))assert(p.path().filename()=="cards.txt");
+ for(auto& p:std::filesystem::directory_iterator(fat_root))assert(p.path().filename()=="cards.txt"||p.path().filename()=="cards.sav");
  std::filesystem::remove_all(fat_root);puts("PASS FatFS footer + pending entry + learning progress, rollback/retry, exact-once, empty list");
 }

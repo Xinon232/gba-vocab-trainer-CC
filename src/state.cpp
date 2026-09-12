@@ -360,7 +360,7 @@ bool State::update(VocabFile& vf, const InputState& in)
         if (in.a_pressed) {
             load_request_index_ = browse_index_;
             save_before_load_ = false;
-            if (vocab_any_dirty(vf) || vf.array_generation) scene_ = 4;
+            if (vocab_any_dirty(vf) || vf.array_generation || vf.pair_dirty) scene_ = 4;
             else load_request_pending_ = true;
         }
         if (in.up_pressed && browse_index_ > 0) {

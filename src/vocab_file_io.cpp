@@ -253,6 +253,7 @@ VocabTransactionTestResult vocab_file_transaction_for_tests(VocabIoFailurePoint 
 #endif
 
 #if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
+#include "list_pair_storage.h"
 static FATFS s_fatfs;
 // FIL addresses never change: FatFS locks and host adapters own these objects.
 BN_DATA_EWRAM_BSS static FIL s_source_pool[2];
@@ -904,6 +905,10 @@ bool vocab_file_load(const char* filename, VocabFile& vf,
         // Retain the very FIL used to index/fingerprint, with no independent
         // opening reread. A failed-close spare stays quarantined until closed.
         if (!close_candidate_source() || !recover_sd_sidecars(filename)) return false;
+        ListPairStorage pairs(*s_candidate_source,s_candidate_source_open);
+        PairMetadata stored_pair;
+        auto pair_status=pairs.load(filename,stored_pair);
+        if(!close_candidate_source())return false;
         if (tracked_open(s_candidate_source, filename, FA_READ | FA_OPEN_EXISTING) != FR_OK)
             return false;
         s_candidate_source_open = true;
@@ -914,6 +919,11 @@ bool vocab_file_load(const char* filename, VocabFile& vf,
             close_candidate_source();
             return false;
         }
+        s_reindex_scratch.pair_blocked = pair_status==ListPairStorage::Result::blocked ||
+            (pair_status==ListPairStorage::Result::valid && s_reindex_scratch.languages.present() &&
+             !s_reindex_scratch.languages.same(stored_pair)) || s_reindex_scratch.rejected_rows;
+        if(s_reindex_scratch.pair_blocked) s_reindex_scratch.languages={};
+        else if(pair_status == ListPairStorage::Result::valid) s_reindex_scratch.languages=stored_pair;
         FIL* previous = s_loaded_source;
         s_loaded_source = s_candidate_source;
         s_candidate_source = previous;
@@ -1254,8 +1264,19 @@ static bool write_sd_grouped_temp(const VocabFile& vf, const char* tmp_name, boo
     FatFsRawRowReader reader(in);
     s_reindex_scratch.reset();
     bool ok = true;
+    const bool physical = !s_entry_direct && !vocab_any_dirty(vf) && vf.array_generation==0;
+    if(physical) {
+        FatFsSequentialSource source(in);char c;uint32_t offset=0;
+        while(ok && source.next(c,offset)) {
+            if(offset>=vf.legacy_pair_start && offset<vf.legacy_pair_end)continue;
+            ok=writer.append(&c,1);
+        }
+        ok=ok&&!source.failed()&&source.identity().size==f_size(&in);
+        s_reindex_scratch=vf;
+        s_reindex_scratch.legacy_pair_start=s_reindex_scratch.legacy_pair_end=0;
+    }
     if (s_entry_direct) ok = write_entry_splice(in,writer);
-    for (int field = 1; !s_entry_direct && field <= 5 && ok; ++field) {
+    for (int field = 1; !physical && !s_entry_direct && field <= 5 && ok; ++field) {
         for (int i = 0; i < vf.line_count && ok; ++i) {
             if (vf.field[i] != field) continue;
             int line_len = 0;
@@ -1272,11 +1293,8 @@ static bool write_sd_grouped_temp(const VocabFile& vf, const char* tmp_name, boo
         }
         if (field < 5 && ok && !writer.append("\r\n", 2)) ok = false;
     }
-    if (!s_entry_direct) {
-        char footer[64];int length=vf.languages.format(footer);
-        if(ok && length && !writer.append(footer,length))ok=false;
-        s_reindex_scratch.languages=vf.languages;
-    }
+    if (!s_entry_direct) s_reindex_scratch.languages=vf.languages;
+    s_reindex_scratch.pair_dirty=false;
     if (ok && !writer.flush()) ok = false;
     if (ok && tracked_sync(&out) != FR_OK) ok = false;
     if (tracked_close(&in) != FR_OK) ok = false;
@@ -1319,7 +1337,7 @@ static bool validate_replacement(const char* replacement,
             return true;
         }, rejected, &readback_languages);
     bool ok = loaded == expected.line_count && !rejected && !readback.failed() &&
-        readback_languages.same(expected.languages) && actual.languages.same(expected.languages) &&
+        !readback_languages.present() && actual.languages.same(expected.languages) &&
         readback.identity().size == f_size(&new_file) && same_identity(readback.identity(), identity);
     if (tracked_close(&new_file) != FR_OK) ok = false;
     return ok;
@@ -1505,13 +1523,27 @@ bool vocab_file_save_grouped(VocabFile& vf, const char* fallback_buf, int fallba
 {
     s_save_installed_index = false;
     s_last_error = "SD I/O ERROR";
+    if(vf.pair_blocked){s_last_error="LIST PAIR: RELOAD / REPAIR";return false;}
+    if(!s_loaded_from_sd && (vf.pair_dirty || vf.legacy_pair_end)) {
+        s_last_error="NO SD: PAIR NOT SAVED";return false;
+    }
     if (vf.rejected_rows) { s_last_error = "READ ONLY: skipped rows"; return false; }
+#if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
+    ListPairStorage pairs(*s_candidate_source,s_candidate_source_open);
+    if(s_loaded_from_sd && vf.languages.present() && !pairs.save(s_loaded_name,vf.languages)) {
+        s_last_error="LIST PAIR SAVE FAILED";return false;
+    }
+#endif
     // Dirty bits cover field movement; array_generation covers reorder/shuffle.
     // A clean unchanged file is an immediate success with no I/O or reindex.
-    if (!vocab_any_dirty(vf) && vf.array_generation == 0) {
+    if (!vocab_any_dirty(vf) && vf.array_generation == 0 && !vf.legacy_pair_end) {
         out_used = 0;
 #if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
-        if (s_loaded_from_sd) return s_source_verified && ensure_loaded_source_open();
+        if (s_loaded_from_sd) {
+            bool ok=s_source_verified && ensure_loaded_source_open();
+            if(ok)vf.pair_dirty=false;
+            return ok;
+        }
 #endif
         return true;
     }

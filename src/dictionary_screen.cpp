@@ -98,7 +98,7 @@ bool run_dictionary_screen(Renderer& renderer,VocabFile* target,DictionaryResult
      if(bn::keypad::b_pressed()){pair_prompt=false;if(count>1)chooser=true;else done=true;wait=true;}
      if(bn::keypad::a_pressed()) {
       target->languages.set(d.code(side),d.code(side^1));
-      if(++target->array_generation==0)++target->array_generation;
+      target->pair_dirty=true;
       int chosen=eligible[choice];count=0;
       for(int i=0;i<catalog.count();++i)if(catalog.match(i,filter->front,filter->back)>=0){if(i==chosen)choice=count;eligible[count++]=i;}
       search.search(side,query.text().data());selected=0;refresh=true;pair_prompt=false;wait=true;
@@ -142,7 +142,7 @@ bool run_dictionary_screen(Renderer& renderer,VocabFile* target,DictionaryResult
     }
     p.clear();
     if(pair_prompt) {
-     p.ui(8,0,"Set list languages");p.body(8,28,"Saved in TXT on manual save.");
+     p.ui(8,0,"Set list languages");p.body(8,28,"Saved in .sav on manual save.");
      char line[48];std::strcpy(line,"FRONT: ");std::strcpy(line+std::strlen(line),d.label(side));p.body(8,60,line);
      std::strcpy(line,"BACK: ");std::strcpy(line+std::strlen(line),d.label(side^1));p.body(8,84,line);
      p.ui(8,120,"Left/Right: Swap languages");p.ui(8,144,"A: Use pair   B: Cancel");
@@ -204,7 +204,7 @@ bool dictionary_accept_pair(Renderer& renderer,VocabFile& vf,DictionaryResult& r
      if(bn::keypad::b_pressed())done=true;
      if(bn::keypad::a_pressed()){accepted=true;done=true;}
     }
-    p.clear();p.ui(8,0,"Set list languages");p.body(8,28,"Saved in TXT on manual save.");
+    p.clear();p.ui(8,0,"Set list languages");p.body(8,28,"Saved in .sav on manual save.");
     char line[48];std::strcpy(line,"FRONT: ");std::strcpy(line+std::strlen(line),swap?result.languages.back:result.languages.front);p.body(8,60,line);
     std::strcpy(line,"BACK: ");std::strcpy(line+std::strlen(line),swap?result.languages.front:result.languages.back);p.body(8,84,line);
     p.ui(8,120,"Left/Right: Swap languages");p.ui(8,144,"A: Use pair   B: Cancel");p.flip();
@@ -215,7 +215,7 @@ bool dictionary_accept_pair(Renderer& renderer,VocabFile& vf,DictionaryResult& r
  if(accepted) {
   if(swap){char tmp[192];std::strcpy(tmp,result.front);std::strcpy(result.front,result.back);std::strcpy(result.back,tmp);
    char code[12];std::strcpy(code,result.languages.front);std::strcpy(result.languages.front,result.languages.back);std::strcpy(result.languages.back,code);}
-  if(!vf.languages.present()){vf.languages=result.languages;if(++vf.array_generation==0)++vf.array_generation;}
+  if(!vf.languages.present()){vf.languages=result.languages;vf.pair_dirty=true;}
  }
  bn::core::update();bn::core::update();renderer.reset();return accepted;
 }

@@ -5,7 +5,8 @@
 // sees each accepted raw row while it is still in bounded scanner scratch.
 // Returning false aborts with -1; I/O failure remains the Source's contract.
 template<class Source, class Visitor>
-int vocab_scan_visit(Source& source, Visitor&& visit, uint32_t& rejected, PairMetadata* languages = nullptr)
+int vocab_scan_visit(Source& source, Visitor&& visit, uint32_t& rejected, PairMetadata* languages = nullptr,
+                     uint32_t* footer_start = nullptr, uint32_t* footer_end = nullptr)
 {
     rejected = 0;
     int count = 0, box = 1;
@@ -31,6 +32,8 @@ int vocab_scan_visit(Source& source, Visitor&& visit, uint32_t& rejected, PairMe
             PairMetadata parsed;
             if (std::strlen(row)!=unsigned(length) || !parsed.parse(row)) { ++rejected; continue; }
             if(languages) *languages = parsed;
+            if(footer_start) *footer_start=start;
+            if(footer_end) *footer_end=offset+1;
             footer = true; continue;
         }
         if (!length) { if (box < 5) ++box; continue; }
@@ -52,7 +55,7 @@ int vocab_scan(Source& source, VocabFile& vf)
             vf.field[i] = uint8_t(box);
             ++vf.field_counts[box - 1];
             return true;
-        }, vf.rejected_rows, &vf.languages);
+        }, vf.rejected_rows, &vf.languages, &vf.legacy_pair_start, &vf.legacy_pair_end);
     vf.loaded = vf.line_count > 0;
     return vf.line_count;
 }

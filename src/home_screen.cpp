@@ -229,7 +229,7 @@ bool run_home_screen(Renderer& renderer,VocabFile& vf,HomeActions actions,bool* 
                 const K keys[]={K::select,K::start,K::b,K::a,K::up,K::down,K::left,K::right};
                 for(int i=0;i<8;++i) if(pressed[i]) {
                     if(!(h.page()==HomeScreen::Page::new_list && keys[i]==K::a && !new_name[0]))
-                        h.press(keys[i],vf.loaded,vocab_any_dirty(vf)||vf.array_generation,vocab_file_count());
+                        h.press(keys[i],vf.loaded,vocab_any_dirty(vf)||vf.array_generation||vf.pair_dirty,vocab_file_count());
                     break;
                 }
             }

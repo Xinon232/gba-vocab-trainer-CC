@@ -48,6 +48,8 @@ struct LineBuf {
 // the GBA.
 struct VocabFile {
     PairMetadata languages;
+    uint32_t legacy_pair_start = 0, legacy_pair_end = 0;
+    bool pair_dirty = false, pair_blocked = false;
     // 10,000 entries × 4 bytes = 40KB
     uint32_t line_offsets[VOCAB_MAX_LINES];
 
@@ -71,6 +73,8 @@ struct VocabFile {
 
     void reset() {
         languages = PairMetadata();
+        legacy_pair_start = legacy_pair_end = 0;
+        pair_dirty = pair_blocked = false;
         rejected_rows = 0;
         line_count = 0;
         loaded = false;

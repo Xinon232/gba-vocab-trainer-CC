@@ -12,7 +12,7 @@ case "${1:-}" in
 esac
 CXX=${CXX:-g++}
 COMMON=(-std=c++17 -O2 -Wall -Wextra -Iinclude src/writer_core.cpp)
-for name in test_sample_file test_entry_shortcuts test_entry_state test_vocab test_vocab_10k test_vocab_grouped test_vocab_file_io_perf test_state test_feedback_hold test_integration test_save_status test_empty_boxes test_scan_limits test_scan_visit test_long_display test_embedded_control test_switch test_page_input test_save_navigation test_text_layout test_body_pixels test_arabic_import test_arabic_text test_arabic_pixels; do
+for name in test_pair_dirty test_sample_file test_entry_shortcuts test_entry_state test_vocab test_vocab_10k test_vocab_grouped test_vocab_file_io_perf test_state test_feedback_hold test_integration test_save_status test_empty_boxes test_scan_limits test_scan_visit test_long_display test_embedded_control test_switch test_page_input test_save_navigation test_text_layout test_body_pixels test_arabic_import test_arabic_text test_arabic_pixels; do
   if $CORRECTNESS_ONLY && [[ "$name" == test_vocab_file_io_perf ]]; then continue; fi
   "$CXX" "${COMMON[@]}" src/vocab.cpp src/vocab_file_io.cpp src/state.cpp "tests/$name.cpp" -o "$BUILD/$name"
   "$BUILD/$name"
@@ -96,6 +96,7 @@ gcc -std=c11 -Wall -Wextra -Wno-discarded-qualifiers -Wno-old-style-declaration 
 "$BUILD/entry_font_coverage"
 "$CXX" -std=c++17 -Iinclude -DHOME_SCREEN_HOST_TEST src/home_screen.cpp tests/test_credit_credentials.cpp -o "$BUILD/credit_credentials"
 "$BUILD/credit_credentials"
+bash tests/run_list_metadata_tests.sh
 bash tests/run_home_tests.sh
 bash tests/run_select_accent_tests.sh
 python3 tests/test_select_accent_docs.py
