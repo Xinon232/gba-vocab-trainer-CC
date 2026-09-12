@@ -120,7 +120,8 @@ int main()
     if (test_transaction_failures()) return 1;
     if (test_structural_validator()) return 1;
     // Legacy migration byte span + pair dirty/blocked flags add 12 bounded bytes.
-    if (sizeof(VocabFile) > 51312) {
+    // Add only the fixed per-list settings value (including alignment).
+    if (sizeof(VocabFile) > 51312 + ((sizeof(ListSettings)+3)&~std::size_t(3))) {
         return fail("VocabFile still contains obsolete per-file line scratch");
     }
 

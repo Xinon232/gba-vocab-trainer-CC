@@ -13,7 +13,7 @@ from tkinter import ttk, filedialog, messagebox
 import dictionary_builder as pack
 import import_review as review
 
-VERSION = '1.6.0-pre.2'
+VERSION = '1.6.0-pre.3'
 
 def atomic_write(path, data):
     path = Path(path)

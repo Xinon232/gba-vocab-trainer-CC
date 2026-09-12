@@ -120,7 +120,7 @@ static void open_home(Renderer& renderer, State& state)
     while(true) {
         bool dictionary_requested=false;
         if (run_home_screen(renderer, g_vocab_file, actions, &dictionary_requested)) {
-            state = State(); // Only a successful load/create replaces navigation.
+            state = State(g_vocab_file.settings.mode); // Only a successful load/create replaces navigation.
             renderer.set_notice(nullptr);
             renderer.set_save_status(SaveStatus::IDLE);
         }
@@ -129,7 +129,7 @@ static void open_home(Renderer& renderer, State& state)
         if(run_dictionary_screen(renderer,nullptr,result)) {
             // Existing guarded browser owns Save/Discard/Cancel before switching.
             if(run_home_screen(renderer, g_vocab_file, actions, nullptr, true)) {
-                state=State();
+                state=State(g_vocab_file.settings.mode);
                 if(dictionary_accept_pair(renderer,g_vocab_file,result))
                     run_entry_screen(renderer,state,g_vocab_file,g_builtin_vocab,g_builtin_vocab_used,result.front,result.back);
             }
@@ -218,7 +218,7 @@ int main()
             }
             const char* filename = state.consume_load_request();
             if (proceed && load_selected_vocab(filename)) {
-                state = State(); // new list: reset navigation, undo and feedback
+                state = State(g_vocab_file.settings.mode); // new list: reset navigation, undo and feedback
                 renderer.set_notice(nullptr);
                 renderer.set_save_status(SaveStatus::IDLE);
                 renderer.reset();

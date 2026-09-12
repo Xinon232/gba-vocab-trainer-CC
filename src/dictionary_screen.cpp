@@ -2,6 +2,7 @@
 #include "dictionary.h"
 #include "dictionary_handle.h"
 #include "dictionary_search.h"
+#include "dictionary_choice.h"
 #include "entry_editor.h"
 #include "entry_screen.h"
 #include "entry_render.h"
@@ -46,22 +47,26 @@ void notice(Canvas& p,const char* a,const char* b){
  release();
 }
 void number(char* out,uint32_t n){char digits[11];int i=0;do{digits[i++]=char('0'+n%10);n/=10;}while(n);int j=0;while(i)out[j++]=digits[--i];out[j]=0;}
-bool add_to_dictionary(Canvas& p,Dictionary d){
+__attribute__((noinline)) bool mutate_dictionary(Canvas& p,Dictionary d,EntryMutation operation,uint32_t identity,const char* front,const char* back){
+ if(operation!=EntryMutation::add&&!d.editable()){notice(p,"Upgrade .dict with PC Save As","Edit/Delete need v2 format.");return false;}
  auto& add_editor=entry_draft_editor();
- add_editor.open(-1,nullptr);add_editor.prefill_add("","");
+ EntryEditorLoan loan(add_editor);
+ if(!add_editor.open_dictionary_mutation(operation,front,back))return false;
  while(add_editor.active()){
   add_editor.frame(keys());
   if(add_editor.screen()==EntryEditor::Screen::menu){release();return false;}
   if(add_editor.commit_requested()){
    p.clear();p.ui(8,64,"SAVING DICTIONARY");p.flip();
-   bool saved=additions.append(add_editor.row());add_editor.finish(saved,additions.error());
+   bool saved=operation==EntryMutation::add?additions.append(add_editor.row()):
+     operation==EntryMutation::edit?additions.replace(identity,add_editor.row()):additions.remove(identity);
+   add_editor.finish(saved,additions.error());
    if(saved){notice(p,"Entry saved to dictionary.","Stored in its .dict file.");return true;}
   }
   p.clear();
   render_entry(add_editor,p.pixels,[](void* ctx,int x,int y,const char* text){
    auto& add_editor=entry_draft_editor();
    auto& canvas=*static_cast<Canvas*>(ctx);
-   if(y==0)text=add_editor.screen()==EntryEditor::Screen::front?"Dictionary entry 1/2":"Dictionary entry 2/2";
+   if(y==0&&add_editor.screen()!=EntryEditor::Screen::confirm_delete)text=add_editor.screen()==EntryEditor::Screen::front?"Dictionary entry 1/2":"Dictionary entry 2/2";
    if(y==18)return;
    if(y==144&&add_editor.screen()==EntryEditor::Screen::back)text="Start+A: Save  Start+B: Back";
    canvas.ui(x,y,text);
@@ -77,15 +82,16 @@ static __attribute__((noinline)) bool dictionary_screen_inner(Renderer& renderer
  char visible_rows[2][2][192];
  const PairMetadata* filter=target?&target->languages:nullptr;
  renderer.reset();bn::core::update();bn::core::update();
- DictionaryCatalog catalog(vocab_file_sd_ready(),vocab_file_dictionary_fil(),vocab_file_dictionary_opened());int eligible[DictionaryCatalog::CAPACITY],count=0;
- for(int i=0;i<catalog.count();++i)if(catalog.dictionary(i).valid()&&(!filter||!filter->present()||catalog.match(i,filter->front,filter->back)>=0))eligible[count++]=i;
+ DictionaryCatalog catalog(vocab_file_sd_ready(),vocab_file_dictionary_fil(),vocab_file_dictionary_opened());
+ DictionaryChoice selection(catalog,target);auto& eligible=selection.eligible;auto& count=selection.count;
  bool picked=false;
  {
   Canvas p;
   if(target&&target->pair_blocked)notice(p,"List metadata needs repair.","Back up TXT/SAV; repair on PC.");
   else if(!count)notice(p,catalog.count()?"No dictionary for this list pair.":"No valid .dict in /gbavocab.",catalog.count()?"Use the PC builder to add it.":"Copy .dict from the PC builder.");
   else {
-   int choice=0,side=0;bool chooser=count>1,done=false,wait=true;
+   auto& choice=selection.choice;int side=0;bool chooser=selection.chooser,done=false,wait=true;
+   if(target&&!chooser)selection.remember(catalog,*target);
    int chooser_origin=-1;
    Dictionary d=catalog.dictionary(eligible[choice]);
    bool pair_prompt=target&&!target->languages.present()&&!chooser;
@@ -103,6 +109,7 @@ static __attribute__((noinline)) bool dictionary_screen_inner(Renderer& renderer
       target->pair_dirty=true;
       int chosen=eligible[choice];count=0;
       for(int i=0;i<catalog.count();++i)if(catalog.match(i,filter->front,filter->back)>=0){if(i==chosen)choice=count;eligible[count++]=i;}
+      selection.remember(catalog,*target);
       search.search(side,query.text().data());selected=0;refresh=true;pair_prompt=false;wait=true;
      }
     }
@@ -117,20 +124,31 @@ static __attribute__((noinline)) bool dictionary_screen_inner(Renderer& renderer
       chooser=false;wait=true;d=catalog.dictionary(eligible[choice]);
       search.open(d);
       pair_prompt=target&&!target->languages.present();
+      if(target&&!pair_prompt)selection.remember(catalog,*target);
       side=filter&&filter->present()?catalog.match(eligible[choice],filter->front,filter->back):0;
       search.search(side,query.text().data());selected=0;refresh=true;
      }
     } else {
      query.frame(held);
      using A=EntryEditor::LookupAction;
-     switch(query.take_lookup_action()) {
+     auto action=query.take_lookup_action();
+     switch(action) {
      case A::cancel:done=true;break;
      case A::up:if(selected>0)--selected;break;
      case A::down:if(selected+1<search.count())++selected;break;
      case A::direction:side^=1;search.search(side,query.text().data());selected=0;refresh=true;break;
      case A::chooser:if(count>1){chooser_origin=choice;chooser=true;wait=true;}break;
      case A::add:
-      if(!target){add_to_dictionary(p,d);search.search(side,query.text().data());selected=0;refresh=true;wait=true;}
+      mutate_dictionary(p,d,EntryMutation::add,~0u,"","");
+      search.search(side,query.text().data());selected=0;refresh=true;wait=true;
+      break;
+     case A::edit:
+     case A::remove:
+      if(search.read(selected,result.front,result.back)){
+       auto identity=search.identity(selected);
+       mutate_dictionary(p,d,action==A::edit?EntryMutation::edit:EntryMutation::remove,identity,result.front,result.back);
+       search.search(side,query.text().data());selected=0;refresh=true;wait=true;
+      }
       break;
      case A::select:
       if(search.read(selected,result.front,result.back)) {
@@ -177,7 +195,7 @@ static __attribute__((noinline)) bool dictionary_screen_inner(Renderer& renderer
      p.body(144,128,query.input().active_group(),32);
      if(query.input().caps())p.body(184,128,"Caps",48);else if(query.input().shift_armed())p.body(184,128,"Shift",48);
      if(additions.error()[0]||search.failed())p.ui(8,144,"Dictionary I/O or format error");
-     else p.ui(8,144,target?"Start+A: Add   Start+B: Back":"Start+Select: New entry");
+     else p.ui(8,144,"Start+A: Add   Start+B: Back");
     }
     p.flip();
    }

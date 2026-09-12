@@ -14,9 +14,9 @@ constexpr int SCENE_FEEDBACK = 3;
 // Match Writer's initial solo-A repeat delay, counted only after release.
 constexpr int FEEDBACK_FRAMES = writer::InputState::NAV_REPEAT_DELAY;
 
-State::State()
+State::State(int mode)
     : current_line_idx_(0),
-      direction_mode_(3),
+      direction_mode_(mode >= 1 && mode <= 3 ? mode : 3),
       current_field_(1),
       alternation_phase_(SIDE_A),
       show_answer_(false),
@@ -216,6 +216,7 @@ void State::finish_feedback(VocabFile& vf)
 
 bool State::update(VocabFile& vf, const InputState& in)
 {
+    direction_mode_=vf.settings.mode;
     if (scene_ == 4) {
         if (in.select_pressed) scene_ = SCENE_BROWSE;
         else if (in.a_pressed || in.b_pressed) {
@@ -252,6 +253,7 @@ bool State::update(VocabFile& vf, const InputState& in)
         if (in.l_pressed) {
             direction_mode_++;
             if (direction_mode_ > 3) direction_mode_ = 1;
+            vf.settings.mode=direction_mode_;vf.pair_dirty=true;
         }
 
         // D-pad L/R switches boxes. This is a "navigate away" action,

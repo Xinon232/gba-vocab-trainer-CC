@@ -2,7 +2,7 @@ from pathlib import Path
 root=Path(__file__).resolve().parents[1]
 main=(root/'src/main.cpp').read_text();render=(root/'src/render.cpp').read_text()
 assert 'state.save_before_load()' in main, 'Save choice must be handled before selected load'
-assert 'state = State()' in main, 'successful new list must reset navigation/undo/feedback'
+assert 'state = State(g_vocab_file.settings.mode)'  in main, 'successful new list must reset navigation/undo/feedback'
 assert 'A save' in render and 'B discard' in render and 'SELECT cancel' in render
 assert 'READ ERROR' in main and 'LOAD FAILED' in main, 'failed display/load must be visible'
 assert 'READ ONLY' in render and 'rejected_rows' in render, 'unsafe source warning must be visible'

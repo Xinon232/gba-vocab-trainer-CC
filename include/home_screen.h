@@ -25,7 +25,7 @@ private:
     bool destination_ = false;
 };
 
-constexpr int HOME_HELP_PAGES = 30;
+constexpr int HOME_HELP_PAGES = 32;
 constexpr int HOME_CREDIT_PAGES = 5;
 const char* home_help_heading(int page);
 const char* home_help_line(int page, int line);

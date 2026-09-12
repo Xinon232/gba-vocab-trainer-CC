@@ -9,8 +9,9 @@ public:
     explicit EntryEditor(writer::Layout::Width measure) : measure_(measure) {}
     void open(int target, const char* raw);
     bool prefill_add(const char* front,const char* back);
+    bool open_dictionary_mutation(EntryMutation operation,const char* front,const char* back);
     void open_lookup(bool allow_add=false);
-    enum class LookupAction { none, up, down, direction, chooser, select, cancel, add };
+    enum class LookupAction { none, up, down, direction, chooser, select, cancel, add, edit, remove };
     LookupAction take_lookup_action() {auto a=lookup_action_;lookup_action_=LookupAction::none;return a;}
     bool take_dictionary_request() {bool r=dictionary_request_;dictionary_request_=false;return r;}
     void frame(uint16_t held);
@@ -56,4 +57,21 @@ private:
     char captured_[VOCAB_RAW_LINE_MAX] = {}, row_[VOCAB_RAW_LINE_MAX] = {};
     char suffix_[VOCAB_RAW_LINE_MAX] = {};
     const char* message_ = "";
+};
+
+// Stack-only exclusive loan. Layout and TextModel own their storage.
+#include <type_traits>
+#include <cstring>
+class EntryEditorLoan {
+public:
+    explicit EntryEditorLoan(EntryEditor& editor):editor_(editor) {
+        static_assert(std::is_trivially_copyable<EntryEditor>::value,"editor loan needs owning value state");
+        std::memcpy(saved_,&editor_,sizeof editor_);
+    }
+    ~EntryEditorLoan(){std::memcpy(&editor_,saved_,sizeof editor_);}
+    EntryEditorLoan(const EntryEditorLoan&)=delete;
+    EntryEditorLoan& operator=(const EntryEditorLoan&)=delete;
+private:
+    EntryEditor& editor_;
+    unsigned char saved_[sizeof(EntryEditor)];
 };

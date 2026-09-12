@@ -55,7 +55,8 @@ int main(int argc,char**argv){
  }else if(mode=="corrupt"){
   FIL pair_file={};bool pair_open=false;ListPairStorage pairs(pair_file,pair_open);PairMetadata en,got;en.set("en","de");assert(pairs.save("cards.txt",en));auto known=read("cards.sav");
   for(unsigned i=0;i<known.size();++i){auto bad=known;bad[i]^=1;put("cards.sav",bad);assert(pairs.load("cards.txt",got)==ListPairStorage::Result::blocked&&!got.present());assert(!pairs.save("cards.txt",en));assert(read("cards.sav")==bad);}
-  put("cards.sav",known+"x");assert(pairs.load("cards.txt",got)==ListPairStorage::Result::blocked);
+  // New settings journal retires incomplete append tails, retaining the base.
+  put("cards.sav",known+"x");assert(pairs.load("cards.txt",got)==ListPairStorage::Result::valid&&got.same(en));
  }else{
   assert(vocab_file_load("cards.txt",v,fallback,sizeof fallback,used));
   int hits=0;

@@ -21,6 +21,17 @@ bool EntryEditor::prefill_add(const char* front,const char* back) {
     operation_=EntryMutation::add;commit_=false;lookup_=false;message_="";
     change(Screen::front);return true;
 }
+bool EntryEditor::open_dictionary_mutation(EntryMutation operation,const char* front,const char* back) {
+    open(-1,nullptr);
+    if(!prefill_add(front,back))return false;
+    operation_=operation;
+    if(operation!=EntryMutation::add){
+        if(!prepare_row())return false;
+        std::strcpy(captured_,row_);
+        if(operation==EntryMutation::remove){selection_=0;change(Screen::confirm_delete);}
+    }
+    return true;
+}
 void EntryEditor::open_lookup(bool allow_add) {
     open(-1,nullptr);prefill_add("","");lookup_=true;lookup_add_=allow_add;
 }
@@ -130,6 +141,12 @@ void EntryEditor::consume(writer::InputEvent e) {
         switch(e.kind) {
         case K::SAVE:lookup_action_=LookupAction::select;return;
         case K::SAVE_MENU:lookup_action_=LookupAction::cancel;return;
+        case K::MOVE_LEFT:
+            if(!(lookup_once_&bit(writer::Button::LEFT)))lookup_action_=LookupAction::edit;
+            lookup_once_|=bit(writer::Button::LEFT);return;
+        case K::MOVE_RIGHT:
+            if(!(lookup_once_&bit(writer::Button::RIGHT)))lookup_action_=LookupAction::remove;
+            lookup_once_|=bit(writer::Button::RIGHT);return;
         case K::MOVE_UP:lookup_action_=LookupAction::up;return;
         case K::MOVE_DOWN:lookup_action_=LookupAction::down;return;
         case K::PAGE_PREV:
@@ -162,7 +179,7 @@ void EntryEditor::consume(writer::InputEvent e) {
             if (!provisional_dirty_) text().mark_saved();
         }
         provisional_ = false;
-        if(lookup_){if(lookup_add_)lookup_action_=LookupAction::add;break;}
+        if(lookup_){lookup_action_=LookupAction::add;break;}
         status_visible_ = !status_visible_;
         break;
     case K::INSERT:

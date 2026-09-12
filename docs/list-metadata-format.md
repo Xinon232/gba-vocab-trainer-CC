@@ -1,12 +1,9 @@
-# Per-list language metadata (implementation checkpoint)
-
-This document describes the implemented list-metadata portion, not a release
-claim. The separately authorized external `.dict` architecture is still pending.
+# Per-list settings (v1.6.0-pre.3)
 
 All list files are directly in `/gbavocab` at the SD-card root. For example,
 `Spanish.txt` is associated with `Spanish.sav`, not `Spanish.txt.sav`. The TXT
-contains vocabulary and learning-box separators only. The SAV contains only the
-front/back language identifiers, not vocabulary or learning progress. It is an
+contains vocabulary and learning-box separators only. The SAV contains the
+front/back language identifiers, mode and preferred dictionary filename, not vocabulary or learning progress. It is an
 application-managed SD file, not cartridge SRAM.
 
 The association is by filename basename. Copy or rename both files to retain the
@@ -20,7 +17,8 @@ long names that cannot fit that suffix fail without modifying the original TXT.
 
 ## Binary SAV v1
 
-Exactly 36 bytes, no trailing data:
+The original base is exactly 36 bytes. It remains accepted with no appended records
+(default Alternate mode, no preference), and is never rewritten during migration:
 
 | Offset | Length | Value |
 |---|---:|---|
@@ -33,6 +31,39 @@ Codes are distinct, 1–11 ASCII characters, begin with `a`–`z`, and contain o
 lowercase letters, digits or hyphens. They describe TXT column order, not a
 ROM-specific dictionary ID. Reversing search direction does not reverse the
 stored list pair.
+
+## Appended settings records
+
+A new mode-only SAV may use `GVPAIR0` + NUL at offset 0, empty zero-filled
+front/back fields, and the same base CRC. A later committed record establishes
+the pair; once present it cannot be changed by any later record. Existing valid
+TXT footer pairs are preserved when loading an empty-pair SAV.
+
+Records start at byte 36 and occupy fixed 112-byte slots:
+
+| Offset | Length | Value |
+|---|---:|---|
+| 0 | 8 | ASCII `GVSET001` |
+| 8 | 12 | Canonical front code, zero-padded |
+| 20 | 12 | Canonical back code, zero-padded |
+| 32 | 64 | Preferred matching `.dict` filename, NUL-terminated/zero-padded, or empty |
+| 96 | 1 | Mode: 1 front, 2 back, 3 Alternate |
+| 97 | 7 | Zero reserved bytes |
+| 104 | 4 | Little-endian IEEE CRC32 over bytes 0–103 |
+| 108 | 4 | ASCII `OK01` commit marker |
+
+The filename must be valid UTF-8, at most 63 bytes, end in `.dict` (ASCII
+case-insensitive), and contain no control bytes or FAT path/reserved characters.
+Catalog language matching is checked before remembering a selected filename.
+No ROM-specific index is persisted. Settings-only saves append here without
+rewriting TXT. All settings share the existing dirty/manual-save/unload guards.
+
+Write body, sync, commit, sync, close, then reopen/read back before success.
+Unchanged settings are deduplicated. Short successful reads are completed in a
+bounded loop. Partial tails are padded to the next slot without changing prior
+bytes. Slots without the final commit marker are retired; malformed committed
+slots block saving/loading settings rather than falling back silently. There is
+no automatic SAV compaction or replacement. Back up metadata before resetting.
 
 ## Writes, verification and recovery
 
@@ -67,7 +98,7 @@ footer conflicting with a valid SAV block saving and clear the usable pair.
 Metadata failures leave the TXT footer intact. Existing transaction journals,
 source identity checks, rollback and FAT alias protections remain in use for TXT.
 
-## Verification at this checkpoint
+## Verification
 
 `bash tests/run_list_metadata_tests.sh` tests production storage integration with
 the existing FAT API adapter. `--sanitize` independently compiles the same new

@@ -73,7 +73,7 @@ public:
         bool down_pressed = false;
     };
 
-    State();
+    explicit State(int mode = 3);
 
     bool update(VocabFile& vf, const InputState& in);
 

@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <cstring>
 #include "pair_metadata.h"
+#include "list_settings.h"
 
 // Hard cap on lines in a .txt file. Text remains on the SD card; only
 // offsets, fields, and dirty flags are kept in EWRAM.
@@ -48,6 +49,7 @@ struct LineBuf {
 // the GBA.
 struct VocabFile {
     PairMetadata languages;
+    ListSettings settings;
     uint32_t legacy_pair_start = 0, legacy_pair_end = 0;
     bool pair_dirty = false, pair_blocked = false;
     // 10,000 entries × 4 bytes = 40KB
@@ -73,6 +75,7 @@ struct VocabFile {
 
     void reset() {
         languages = PairMetadata();
+        settings = ListSettings();
         legacy_pair_start = legacy_pair_end = 0;
         pair_dirty = pair_blocked = false;
         rejected_rows = 0;

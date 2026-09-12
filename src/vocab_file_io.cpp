@@ -909,7 +909,8 @@ bool vocab_file_load(const char* filename, VocabFile& vf,
         if (!close_candidate_source() || !recover_sd_sidecars(filename)) return false;
         ListPairStorage pairs(*s_candidate_source,s_candidate_source_open);
         PairMetadata stored_pair;
-        auto pair_status=pairs.load(filename,stored_pair);
+        ListSettings stored_settings;
+        auto pair_status=pairs.load(filename,stored_pair,&stored_settings);
         if(!close_candidate_source())return false;
         if (tracked_open(s_candidate_source, filename, FA_READ | FA_OPEN_EXISTING) != FR_OK)
             return false;
@@ -922,10 +923,11 @@ bool vocab_file_load(const char* filename, VocabFile& vf,
             return false;
         }
         s_reindex_scratch.pair_blocked = pair_status==ListPairStorage::Result::blocked ||
-            (pair_status==ListPairStorage::Result::valid && s_reindex_scratch.languages.present() &&
+            (pair_status==ListPairStorage::Result::valid && stored_pair.present() && s_reindex_scratch.languages.present() &&
              !s_reindex_scratch.languages.same(stored_pair)) || s_reindex_scratch.rejected_rows;
         if(s_reindex_scratch.pair_blocked) s_reindex_scratch.languages={};
-        else if(pair_status == ListPairStorage::Result::valid) s_reindex_scratch.languages=stored_pair;
+        else if(pair_status == ListPairStorage::Result::valid && stored_pair.present()) s_reindex_scratch.languages=stored_pair;
+        s_reindex_scratch.settings=stored_settings;
         FIL* previous = s_loaded_source;
         s_loaded_source = s_candidate_source;
         s_candidate_source = previous;
@@ -1301,6 +1303,7 @@ static bool write_sd_grouped_temp(const VocabFile& vf, const char* tmp_name, boo
         if (field < 5 && ok && !writer.append("\r\n", 2)) ok = false;
     }
     if (!s_entry_direct) s_reindex_scratch.languages=vf.languages;
+    s_reindex_scratch.settings=vf.settings;
     s_reindex_scratch.pair_dirty=false;
     if (ok && !writer.flush()) ok = false;
     if (ok && tracked_sync(&out) != FR_OK) ok = false;
@@ -1537,7 +1540,7 @@ bool vocab_file_save_grouped(VocabFile& vf, const char* fallback_buf, int fallba
     if (vf.rejected_rows) { s_last_error = "READ ONLY: skipped rows"; return false; }
 #if defined(__DEVKITARM__) || defined(VOCAB_HOST_FATFS)
     ListPairStorage pairs(*s_candidate_source,s_candidate_source_open);
-    if(s_loaded_from_sd && vf.languages.present() && !pairs.save(s_loaded_name,vf.languages)) {
+    if(s_loaded_from_sd && (vf.languages.present()||vf.pair_dirty) && !pairs.save_settings(s_loaded_name,vf.languages,vf.settings)) {
         s_last_error="LIST PAIR SAVE FAILED";return false;
     }
 #endif
@@ -1736,7 +1739,7 @@ bool vocab_file_mutate(VocabFile& vf, EntryMutation operation, int target,
     }
     if(vf.pair_blocked){s_last_error="LIST PAIR: RELOAD / REPAIR";return false;}
     ListPairStorage pairs(*s_candidate_source,s_candidate_source_open);
-    if(vf.languages.present()&&!pairs.save(s_loaded_name,vf.languages)){s_last_error="LIST PAIR SAVE FAILED";return false;}
+    if((vf.languages.present()||vf.pair_dirty)&&!pairs.save_settings(s_loaded_name,vf.languages,vf.settings)){s_last_error="LIST PAIR SAVE FAILED";return false;}
     s_entry_plan = vf;
     int committed_index = 0;
     if (operation == EntryMutation::add) {

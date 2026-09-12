@@ -36,16 +36,43 @@ int main(){
    for(int frame=0;frame<120;++frame){e.frame(bit(Button::START)|bit(b));assert(e.take_lookup_action()==EntryEditor::LookupAction::none);}
    e.frame(0);
  }
- tap(e,bit(Button::START)|bit(Button::LEFT));assert(e.text().caret_byte()==0);
- tap(e,bit(Button::UP)|bit(Button::A));assert(!std::strcmp(e.text().data(),"ba"));
+ for(auto b:{Button::LEFT,Button::RIGHT}) {
+   e.frame(bit(Button::START));e.frame(bit(Button::START)|bit(b));
+   assert(e.take_lookup_action()==(b==Button::LEFT?EntryEditor::LookupAction::edit:EntryEditor::LookupAction::remove));
+   for(int f=0;f<120;++f){e.frame(bit(Button::START)|bit(b));assert(e.take_lookup_action()==EntryEditor::LookupAction::none);}
+   e.frame(bit(b));e.frame(0);assert(e.take_lookup_action()==EntryEditor::LookupAction::none);
+   assert(e.text().caret_byte()==1);assert(!std::strcmp(e.text().data(),"a"));
+ }
+ tap(e,bit(Button::UP)|bit(Button::A));assert(!std::strcmp(e.text().data(),"ab"));
  for(bool editable:{false,true})for(int order=0;order<3;++order)for(int tail=0;tail<2;++tail){
    e.open_lookup(editable);e.frame(0);tap(e,bit(Button::UP)|bit(Button::B));
    if(order<2)e.frame(bit(order?Button::SELECT:Button::START));
    e.frame(bit(Button::START)|bit(Button::SELECT));
-   assert(e.take_lookup_action()==(editable?EntryEditor::LookupAction::add:EntryEditor::LookupAction::none));
+   assert(e.take_lookup_action()==EntryEditor::LookupAction::add);
    for(int frame=0;frame<120;++frame){e.frame(bit(Button::START)|bit(Button::SELECT));assert(e.take_lookup_action()==EntryEditor::LookupAction::none);}
    e.frame(bit(tail?Button::START:Button::SELECT));e.frame(0);
    assert(e.take_lookup_action()==EntryEditor::LookupAction::none);assert(!std::strcmp(e.text().data(),"a"));
  }
- puts("PASS production editor dictionary request, NEW pair drafts/cancel, lookup actions and release tails, typing/caret resume, main-only add chord");
+ // The production scoped loan restores every byte, including inactive drafts,
+ // suffix, input session, layout, clock, captured identity and pending state.
+ e.open(7,"old\talt\textra");e.frame(0);tap(e,bit(Button::DOWN));tap(e,bit(Button::A));
+ e.frame(0);tap(e,bit(Button::START)|bit(Button::A));e.frame(0);
+ unsigned char snapshot[sizeof e];std::memcpy(snapshot,&e,sizeof e);
+ for(auto op:{EntryMutation::add,EntryMutation::edit,EntryMutation::remove})for(int outcome=0;outcome<3;++outcome){
+   { EntryEditorLoan loan(e);
+     assert(e.open_dictionary_mutation(op,"new","neu"));e.frame(0);
+     if(op==EntryMutation::remove){
+       assert(e.screen()==EntryEditor::Screen::confirm_delete);assert(!e.selection());
+       if(outcome){tap(e,bit(Button::RIGHT));tap(e,bit(Button::A));assert(e.commit_requested());}
+       else tap(e,bit(Button::A));
+     }else{
+       assert(!std::strcmp(e.text().data(),"new"));
+       if(outcome){tap(e,bit(Button::START)|bit(Button::A));tap(e,bit(Button::START)|bit(Button::A));assert(e.commit_requested());assert(!std::strcmp(e.row(),"new\tneu"));}
+       else tap(e,bit(Button::START)|bit(Button::B));
+     }
+     if(outcome)e.finish(outcome==1,"injected failure");
+   }
+   assert(!std::memcmp(snapshot,&e,sizeof e));
+ }
+ puts("PASS production lookup mutation actions, release tails, nested mutation drafts and exact restoration");
 }

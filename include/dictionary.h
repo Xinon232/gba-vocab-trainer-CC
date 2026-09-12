@@ -100,6 +100,7 @@ public:
  DictionaryCatalog(const DictionaryCatalog&)=delete;
  DictionaryCatalog& operator=(const DictionaryCatalog&)=delete;
  int count() const{return count_;}
+ const char* filename(int i)const{return i>=0&&i<count_?names_[i]:"";}
  Dictionary dictionary(int i){return i>=0&&i<count_?Dictionary(this,i):Dictionary();}
  int match(int i,const char* a,const char* b){auto d=dictionary(i);if(!d.valid())return -1;if(!std::strcmp(a,d.code(0))&&!std::strcmp(b,d.code(1)))return 0;if(!std::strcmp(a,d.code(1))&&!std::strcmp(b,d.code(0)))return 1;return -1;}
  bool read(int,uint32_t,void*,unsigned) override;

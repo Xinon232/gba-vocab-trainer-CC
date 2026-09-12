@@ -38,7 +38,11 @@ for mode in orphan temporary probe dirty blocked failure clean-add clean-edit cl
 "$BUILD/input"
 "$CXX" "${FLAGS[@]}" -DHOME_SCREEN_HOST_TEST src/home_screen.cpp tests/test_dictionary_home.cpp -o "$BUILD/home"
 "$BUILD/home"
+"$CXX" "${FLAGS[@]}" -DVOCAB_HOST_FATFS src/writer_core.cpp src/vocab.cpp src/vocab_file_io.cpp src/dictionary.cpp tests/host_fatfs.cpp tests/test_dictionary_choice.cpp -o "$BUILD/choice"
+"$BUILD/choice" "$BUILD/large.dict"
+python3 tests/run_dictionary_screen_tests.py "${1:-}"
 python3 tests/test_dictionary_wiring.py
 python3 tests/test_dictionary_add_wiring.py
+python3 tests/test_dictionary_notice_text.py
 python3 tests/test_dictionary_docs.py
 printf 'PASS all external dictionary host suites\n'
