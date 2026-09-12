@@ -14,4 +14,14 @@ class AppTests(unittest.TestCase):
    old=path.read_bytes()
    with self.assertRaises(ValueError):app.build_dictionary(dict(spec,entries=[]),path)
    self.assertEqual(path.read_bytes(),old)
+ def test_self_test_exercises_zip_review(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   report = app.self_test(tmp)
+   self.assertTrue(report.get('zip_import'))
+   self.assertEqual(report['flagged_oversized'], 4)
+   self.assertEqual(report['excluded'], 4)
+   self.assertEqual(report['total'] - report['excluded'], report['entries'])
+   self.assertTrue(report['source_unchanged'])
+   self.assertTrue(report['both_indexes_verified'])
+
 if __name__=='__main__':unittest.main()

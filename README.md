@@ -17,9 +17,15 @@ Current flashcard text support uses SuperFW-derived fonts for broad language com
 - Korean Hangul syllables (`U+AC00–U+D7A3`)
 - Imported Arabic uses actual Ghoulam contextual glyphs and lam-alef, RTL runs and display-only harakat filtering. Latin/numbers/punctuation remain SuperFW. Both fields, the editor and Delete preview are supported; no Arabic typing layout was added. Original TXT bytes and logical UTF-8 caret positions are retained. See `docs/arabic.md` and the full-controls manual.
 
-## v1.6.0-pre.1 external dictionaries and PC builder
+## External dictionaries and PC builder
 
 Use one normal `gbavocab.gba` with standalone custom `.dict` files. The graphical Windows executable and Linux builder import your own legally obtained UTF-8 TAB-separated exports and build both directional indexes. No compiler or ROM template is required. Extract the whole package and launch `gbavocab-builder.exe` (Windows) or `gbavocab-builder` (Linux); import an export, enter its name/language pair, and Save .dict as. Open .dict reads the base and GBA additions; Save As compacts them into a new indexed file without changing the original. No copyrighted dictionary is bundled.
+
+Builder **1.6.0-pre.2** adds **Import TXT / TSV / ZIP** and paginated **All / Flagged** review; the ROM, controls, fonts, 191-byte pair limit and binary format are unchanged. A dict.cc DE-ES header suggests German-Spanish and de/es (editable). Source comments/license and extra metadata remain visible, not vocabulary output. Meaningful `{gender}`, `[usage]`, `(qualifiers)`, accents and punctuation stay exactly as imported; no alternate cleaned search keys are added.
+
+Invalid rows are flagged together rather than stopping at the first one. **Remove flagged oversized entries** confirms the exact exclusion count; **Remove selected** and **Remove exact duplicates** are separate actions. Nothing is removed automatically or truncated. Undo and Reset exclusions restore rows. Save is blocked until all included invalid rows are excluded; it validates and reads back both indexes before reporting total/excluded/output counts. Save As never overwrites the source. Failed/cancelled imports preserve your previous session; replacing unsaved work prompts first.
+
+ZIP imports never extract member paths. Select the TXT/TSV member when ambiguous; only unencrypted stored/deflated ZIPs are accepted. Limits: 64 MiB archive, 64 MiB selected uncompressed text, 256 archive members, 250,000 vocabulary rows (the existing output base still has its 32 MiB limit). Invalid UTF-8/corrupt ZIPs are rejected. Use only data you are licensed to use: dict.cc private-use exports and derived `.dict` files must not be redistributed. The builder does not download dictionaries.
 
 Put everything directly in the SD-root `/gbavocab` folder, with no subdirectories:
 

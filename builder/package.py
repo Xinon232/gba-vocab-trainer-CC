@@ -37,6 +37,11 @@ def main():
     subprocess.run([str(exe), '--gui-smoke', str(qa)], check=True, timeout=60)
     smoke = json.loads((qa / 'gui-smoke.json').read_text())
     assert smoke['window_created'] and smoke['packaged'] and smoke['created_and_read_dict']
+    for evidence in (report, smoke):
+        assert evidence['zip_import'] and evidence['source_unchanged'] and evidence['both_indexes_verified']
+        assert evidence['flagged_oversized'] == evidence['excluded'] == 4
+        assert evidence['total'] - evidence['excluded'] == evidence['entries']
+    assert smoke['confirmation_exercised']
     archive = shutil.make_archive(str(args.output / ('gbavocab-builder-windows' if sys.platform == 'win32' else 'gbavocab-builder-linux')), 'zip', args.output, folder.name)
     manifest = dict(executable=str(exe.relative_to(args.output)), executable_sha256=hashlib.sha256(exe.read_bytes()).hexdigest(), archive=Path(archive).name, archive_sha256=hashlib.sha256(Path(archive).read_bytes()).hexdigest(), self_test=report, gui_smoke=smoke)
     (qa / 'package.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
