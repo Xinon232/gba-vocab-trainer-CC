@@ -29,7 +29,7 @@ int vocab_scan_visit(Source& source, Visitor&& visit, uint32_t& rejected, PairMe
         if (footer) { if(length) ++rejected; continue; }
         if (PairMetadata::starts(row,"# gbavocab:")) {
             PairMetadata parsed;
-            if (!parsed.parse(row)) { ++rejected; continue; }
+            if (std::strlen(row)!=unsigned(length) || !parsed.parse(row)) { ++rejected; continue; }
             if(languages) *languages = parsed;
             footer = true; continue;
         }

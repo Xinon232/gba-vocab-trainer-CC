@@ -63,9 +63,9 @@ class BuilderWindow:
         self.table.pack(fill='both', expand=True)
         buttons = ttk.Frame(frame)
         buttons.pack(fill='x', pady=10)
-        ttk.Button(buttons, text='Add export…', command=self.add_export).pack(side='left')
+        ttk.Button(buttons, text='Add export...', command=self.add_export).pack(side='left')
         ttk.Button(buttons, text='Remove selected', command=self.remove).pack(side='left', padx=8)
-        ttk.Button(buttons, text='Build .gba…', command=self.build_rom).pack(side='right')
+        ttk.Button(buttons, text='Build .gba...', command=self.build_rom).pack(side='right')
         self.status = tk.StringVar(value='Ready. Up to 16 named dictionaries; 32 MiB maximum ROM.')
         ttk.Label(frame, textvariable=self.status, wraplength=740).pack(anchor='w', pady=8)
         ttk.Label(frame, text='Search: ASCII case-insensitive prefix; other Unicode characters match exactly.\nEach pair: at most 191 UTF-8 bytes including TAB. Long/malformed rows are reported, not truncated.').pack(anchor='w')
@@ -132,7 +132,7 @@ class BuilderWindow:
         try:
             if any(Path(output).resolve() == Path(d['source']).resolve() for d in self.dictionaries):
                 raise ValueError('Do not overwrite an input export')
-            self.status.set('Indexing both directions and checking fit…')
+            self.status.set('Indexing both directions and checking fit...')
             self.root.update_idletasks()
             report = build(self.template, self.dictionaries, output)
             self.status.set(f"Built and verified {report['entries']:,} entries. ROM {report['bytes']:,} / {pack.LIMIT:,} bytes. {output}")

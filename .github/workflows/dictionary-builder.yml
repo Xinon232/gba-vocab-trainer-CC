@@ -52,20 +52,25 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: dictionary-template
-      - run: python -m pip install PyInstaller==6.16.0
+      - run: python -m pip install PyInstaller==6.16.0 Pillow==12.3.0
       - run: python tests/test_dictionary_builder.py
       - run: python tests/test_builder_app.py
       - name: Package Windows PE and test actual executable
         if: runner.os == 'Windows'
-        run: python builder/package.py
+        run: |
+          python tests/test_builder_gui.py --template gbavocab.gba --out builder-dist/verification
+          python builder/package.py
       - name: Package Linux executable and test actual executable
         if: runner.os == 'Linux'
-        run: xvfb-run -a python builder/package.py
+        run: |
+          xvfb-run -a python tests/test_builder_gui.py --template gbavocab.gba --out builder-dist/verification
+          xvfb-run -a python builder/package.py
       - uses: actions/upload-artifact@v4
         with:
           name: dictionary-builder-${{ runner.os }}
           path: |
             builder-dist/gbavocab-builder-*.zip
             builder-dist/verification/*.json
+            builder-dist/verification/*.png
             builder-dist/verification/gbavocab.gba
           if-no-files-found: error

@@ -126,7 +126,7 @@ bool run_dictionary_screen(Renderer& renderer,VocabFile* target,DictionaryResult
     }else {
      p.ui(8,0,"LOCAL DICTIONARY");p.body(8,18,d.name());
      char status[64];std::strcpy(status,d.code(side));std::strcpy(status+std::strlen(status)," > ");std::strcpy(status+std::strlen(status),d.code(side^1));std::strcpy(status+std::strlen(status),"  ");
-     number(status+std::strlen(status),range.end-range.begin);std::strcpy(status+std::strlen(status)," matches");p.body(8,128,status,132);
+     number(status+std::strlen(status),range.end-range.begin);p.body(8,128,status,132);
      auto caret=query.layout().position(query.text(),query.text().caret_byte());
      auto start=query.layout().row_content_start(query.text(),caret.row);
      p.body(8,38,query.text().data()+start,220);if(query.caret_visible())p.caret(8+caret.x,38);

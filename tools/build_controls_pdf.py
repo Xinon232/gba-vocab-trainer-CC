@@ -34,6 +34,9 @@ AUDIT_SOURCES = (
     'include/vocab_file_io.h', 'include/home_screen.h', 'include/writer_layout.h',
     'Makefile', 'src/entry_font.c', 'src/entry_font_pack.s',
     'include/arabic_text.h', 'include/ghoulam_data.h', 'src/arabic_text.cpp',
+    'include/dictionary.h', 'include/dictionary_screen.h', 'include/pair_metadata.h',
+    'src/dictionary.cpp', 'src/dictionary_screen.cpp', 'include/vocab_scanner.h',
+    'builder/app.py', 'builder/dictionary_builder.py', 'builder/package.py',
 )
 
 

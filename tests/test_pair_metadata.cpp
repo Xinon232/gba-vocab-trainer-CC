@@ -14,5 +14,7 @@ int main() {
     assert(!std::strcmp(again.languages.front,"en"));
     const char* bad[]={"# gbavocab: front=EN; back=de\n", "# gbavocab: front=en; back=en\n", "# gbavocab: front=en; back=de\ncat\tKatze\n", "# gbavocab: front=en; back=de\n# gbavocab: front=en; back=de\n"};
     for(auto s:bad) {vocab_open(again,s,std::strlen(s));assert(again.rejected_rows);}
+    const char embedded[]="# gbavocab: front=en; back=de\0hidden\n";
+    vocab_open(again,embedded,sizeof(embedded)-1);assert(again.rejected_rows);
     puts("PASS pair footer grammar, boxes, roundtrip, malformed/duplicate/nonterminal safety");
 }
