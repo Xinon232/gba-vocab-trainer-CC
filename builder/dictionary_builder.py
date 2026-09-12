@@ -4,7 +4,8 @@ import re
 import struct
 import zlib
 
-FILE_MAGIC = b'GVDIDX01'
+FILE_MAGIC = b'GVDIDX02'
+LEGACY_MAGIC = b'GVDIDX01'
 HEADER = 160
 SLOT = 208
 ADDITION_LIMIT = 512
@@ -38,8 +39,8 @@ def build_dict(spec):
     return bytes(out)
 
 def read_dict(data):
-    if len(data)<HEADER or data[:8]!=FILE_MAGIC or zlib.crc32(data[:156])!=struct.unpack_from('<I',data,156)[0]:
-        raise ValueError('Invalid .dict v1 header')
+    if len(data)<HEADER or data[:8] not in (FILE_MAGIC, LEGACY_MAGIC) or zlib.crc32(data[:156])!=struct.unpack_from('<I',data,156)[0]:
+        raise ValueError('Invalid or unsupported .dict header')
     end,n=struct.unpack_from('<II',data,8)
     rec,i0,i1,strings=struct.unpack_from('<IIII',data,120)
     if any(data[140:156]) or end>LIMIT or not n or (rec,i0,i1,strings)!=(HEADER,HEADER+n*12,HEADER+n*20,HEADER+n*28) or not strings<end<=len(data):
@@ -71,19 +72,39 @@ def read_dict(data):
             rows.append(row)
         if rows!=sorted(range(n),key=lambda j:(key(pairs[j][side]),j)):raise ValueError('Invalid sorted index')
         indexes.append(rows)
-    added=[]
+    added={}
     if len(data)-end>SLOT*ADDITION_LIMIT:raise ValueError('Addition capacity exceeded')
     for at in range(end,len(data),SLOT):
         slot=data[at:at+SLOT]
         if len(slot)!=SLOT or slot[204:]!=b'OK01':continue
-        if slot[:4]!=b'ADD1' or struct.unpack_from('<I',slot,4)[0]!=(at-end)//SLOT or zlib.crc32(slot[:200])!=struct.unpack_from('<I',slot,200)[0]:raise ValueError('Corrupt committed addition')
+        if zlib.crc32(slot[:200])!=struct.unpack_from('<I',slot,200)[0]:raise ValueError('Corrupt committed addition')
+        target=struct.unpack_from('<I',slot,4)[0]
+        editing=slot[:4] in (b'REP2', b'DEL2') and data[:8]==FILE_MAGIC
+        deleting=slot[:4]==b'DEL2'
+        table, identity = pairs, target
+        if editing:
+            if target & 0x80000000: table, identity = added, target & 0x7fffffff
+            if (identity not in table if isinstance(table, dict) else identity>=n):
+                raise ValueError('Invalid mutation target')
+            if table[identity] is None and not deleting:raise ValueError('Deleted mutation target')
+        elif slot[:4]!=b'ADD1' or target!=(at-end)//SLOT:
+            raise ValueError('Corrupt committed addition')
         row=slot[8:200];zero=row.find(b'\0')
         if zero<0 or any(row[zero:]):raise ValueError('Invalid addition padding')
-        pair=tuple(row[:zero].decode('utf-8').split('\t'))
-        validate_pair(pair)
-        added.append(pair)
-    result.update(entries=pairs,indexes=indexes,additions=added)
-    validate_spec(result)
+        if deleting:
+            if zero:raise ValueError('Invalid deletion payload')
+            pair=None
+        else:
+            pair=tuple(row[:zero].decode('utf-8').split('\t'))
+            validate_pair(pair)
+        if editing:table[identity]=pair
+        else:added[target]=pair
+    pairs=[pair for pair in pairs if pair is not None]
+    indexes=[sorted(range(len(pairs)),key=lambda j:(key(pairs[j][side]),j)) for side in range(2)]
+    result.update(entries=pairs,indexes=indexes,additions=[pair for pair in added.values() if pair is not None])
+    # Empty live dictionaries are valid after deletion; the PC builder still
+    # refuses to emit an empty immutable base.
+    validate_spec(result, allow_empty=True)
     return result
 
 
@@ -105,12 +126,12 @@ def validate_pair(pair):
         if not any(c>32 for c in data) or any(ord(c)<32 or ord(c)==127 for c in field):raise ValueError('Invalid dictionary field')
     if len(('\t'.join(pair)).encode('utf-8'))>191:raise ValueError('Pair exceeds 191 UTF-8 bytes')
 
-def validate_spec(spec):
+def validate_spec(spec, *, allow_empty=False):
     for side in ('front','back'):
         if not re.fullmatch(r'[a-z][a-z0-9-]{0,10}',spec[side]):
             raise ValueError('Language codes: 1..11 lowercase letters/digits/hyphens, starting with a letter')
     if spec['front']==spec['back']:raise ValueError('Choose distinct languages')
-    if not spec['entries']:raise ValueError('Empty dictionary')
+    if not spec['entries'] and not allow_empty:raise ValueError('Empty dictionary')
     for pair in spec['entries']:validate_pair(pair)
 
 def parse_export(text):

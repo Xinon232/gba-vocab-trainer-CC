@@ -8,7 +8,7 @@ class External(unittest.TestCase):
   pairs=[(f'front {i:05}',f'back {40009-i:05}') for i in range(40010)]
   spec=dict(name='English German',front='en',back='de',entries=pairs)
   data=b.build_dict(spec)
-  self.assertEqual(data[:8],b'GVDIDX01')
+  self.assertEqual(data[:8],b'GVDIDX02')
   self.assertEqual(b.read_dict(data)['entries'],pairs)
   self.assertEqual(b.build_dict(spec),data)
   for side,order in enumerate(b.read_dict(data)['indexes']):

@@ -32,8 +32,8 @@ int main(int argc,char**argv){assert(argc==2);char temporary[]="/tmp/gbavocab-ex
  for(unsigned byte=0;byte<208;++byte){slot[byte]^=1;int state=dict_format::slot(slot,1);assert(state==(byte>=204?0:-1));slot[byte]^=1;}
  // Corrupt committed rows are never silently skipped or overwritten.
  slot[100]^=1;{std::ofstream out(path,std::ios::binary|std::ios::trunc);out.write(one.data(),one.size());out.write(reinterpret_cast<char*>(slot),208);}auto corrupt=contents(path);
- {DictionaryCatalog c(true,vocab_file_dictionary_fil(),vocab_file_dictionary_opened());auto d=c.dictionary(0);DictionaryAdditions a;DictionarySearch s(a);s.open(d);assert(a.search(0,"")<0);assert(!a.append("other\tanders"));assert(contents(path)==corrupt);s.search(0,"front 12345");assert(s.count()==1);}slot[100]^=1;
- // Fail each production API call position, including post-commit readback/close.
+ {DictionaryCatalog c(true,vocab_file_dictionary_fil(),vocab_file_dictionary_opened());auto d=c.dictionary(0);DictionaryAdditions a;DictionarySearch s(a);s.open(d);assert(a.search(0,"")<0);assert(!a.append("other\tanders"));assert(contents(path)==corrupt);s.search(0,"front 12345");assert(s.count()==0&&s.failed());}slot[100]^=1;
+  // Fail each production API call position, including post-commit readback/close.
  for(const char* op:{"open","read","seek","write","sync","close"}){
   unsigned calls=0;{std::ofstream out(path,std::ios::binary|std::ios::trunc);out.write(one.data(),one.size());}
   {DictionaryCatalog c(true,vocab_file_dictionary_fil(),vocab_file_dictionary_opened());auto d=c.dictionary(0);DictionaryAdditions a;DictionarySearch s(a);s.open(d);fat_hook=[&](const std::string&event,const std::string&){calls+=event==op;return FR_OK;};assert(a.append("fault campaign\tFehler"));fat_hook={};}

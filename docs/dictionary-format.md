@@ -1,6 +1,6 @@
-# gbavocab custom indexed dictionary, version 1
+# gbavocab custom indexed dictionary, versions 1 and 2
 
-`.dict` here is a **custom gbavocab format**, not StarDict, DICT protocol, or a standard dictionary format. The normal v1.6.0-pre.1 ROM reads files directly from SD-root `/gbavocab`. No ROM patching, numbered filename conventions, subdirectories or per-dictionary SAV are involved. The chooser discovers up to 24 filenames of at most 63 UTF-8 bytes with case-insensitive `.dict` suffix; internal name/pair is displayed. Files beyond discovery capacity are not selected. Do not modify or swap a file while the application has it open.
+`.dict` here is a **custom gbavocab format**, not StarDict, DICT protocol, or a standard dictionary format. Files live directly in SD-root `/gbavocab`. The updated builder emits version 2; the updated reader accepts versions 1 and 2. **Old ROMs and PC builders reject the version-2 header.** This prevents old software from ignoring replacements or resurrecting deleted entries. Version-1 files remain readable and support legacy additions, but Edit/Delete require PC Open .dict / Save As to a new version-2 file first: the GBA never patches the old header or rewrites its base in place. No ROM patching, numbered filename conventions, subdirectories or per-dictionary SAV are involved. The chooser discovers up to 24 filenames of at most 63 UTF-8 bytes with case-insensitive `.dict` suffix; internal name/pair is displayed. Files beyond discovery capacity are not selected. Do not modify or swap a file while the application has it open.
 
 ## Integer, string and checksum conventions
 
@@ -14,7 +14,7 @@ The base is at most 32 MiB. Its exact end (not physical EOF) is in the header; a
 
 | Offset | Bytes | Meaning |
 |---:|---:|---|
-| 0 | 8 | ASCII `GVDIDX01` (version 1) |
+| 0 | 8 | ASCII `GVDIDX01` (legacy) or `GVDIDX02` (mutations supported) |
 | 8 | 4 | base end / first append-slot offset |
 | 12 | 4 | base entry count N |
 | 16 | 32 | NUL-terminated name, 1..31 UTF-8 bytes, zero padding |
@@ -42,9 +42,9 @@ Slot J starts at `base_end + 208*J`, for J=0..511. Base and all earlier physical
 
 | Slot offset | Bytes | Meaning |
 |---:|---:|---|
-| 0 | 4 | ASCII `ADD1` |
-| 4 | 4 | physical slot number J |
-| 8 | 192 | canonical `front TAB back NUL`, remaining bytes zero |
+| 0 | 4 | ASCII `ADD1`, or version-2 `REP2` / `DEL2` |
+| 4 | 4 | `ADD1`: physical slot number J; mutation: immutable target identity |
+| 8 | 192 | canonical `front TAB back NUL`, remaining bytes zero; `DEL2`: all zero |
 | 200 | 4 | CRC32 of slot bytes [0,200) |
 | 204 | 4 | commit marker ASCII `OK01` |
 
@@ -52,11 +52,15 @@ Append sequence: freshly reopen and scan the bounded addition area; return succe
 
 A final short slot, or a complete slot without the exact commit marker, is uncommitted and ignored. It permanently consumes a physical slot. Retry skips it and appends after it, preserving every previous byte. Repeated interruption can exhaust slots before 512 valid pairs; use PC Open .dict / Save As to produce a new compacted indexed base. A full valid committed row remains recognized after an ambiguous returned sync/close/readback error, so retry is idempotent. Duplicate detection applies to exact prior additions (case-sensitive canonical bytes), not existing base entries or different translations.
 
-A slot with the exact commit marker but invalid magic/sequence/padding/UTF-8/CRC blocks addition search and further appends; base queries remain independently available with an error notice. It is not silently discarded. Back up the file and filesystem before PC recovery. CRC/commit checks do not promise atomic physical sector writes; real Supercard power-loss behavior is unverified.
+A version-2 base identity is its original canonical record-table ordinal `0..N-1`, **not its current match position or text**. An added-row identity is `0x80000000 | original_ADD1_slot`. `REP2` replaces that identity's live canonical pair; `DEL2` removes it from both directions. Subsequent mutations retain the original identity, including after key changes. Mutation targets must refer to a base ordinal or an earlier committed ADD1, never a replacement slot or uncommitted hole. The latest valid mutation wins; deletion is terminal (repeated deletion is accepted, replacement after deletion is corruption). Distinct duplicate senses remain distinct. All-deleted live views are valid, although PC output still requires a nonempty compacted base.
+
+All operation types and retired slots share the **512 physical-slot limit**. Repeated edits consume slots too. Exact replacement retries against the latest committed state and repeated deletion retries return success without another write. PC Open .dict / Save As applies the complete log, drops superseded/deleted rows and holes, and rebuilds both indexes in a new version-2 file. Canonical identities are local to one file and are reassigned on compaction; never retain a selected-row identity across replacing that file. Dictionary edits do not modify copies already stored in learning-list TXT files.
+
+A slot with the exact commit marker but invalid magic/target/sequence/padding/UTF-8/CRC blocks further appends. Version-2 lookup fails closed as a whole: it never exposes the immutable base as a fallback that could resurrect a deleted/replaced row. Legacy version-1 additions retain their independent base-read behavior with an error notice. Invalid records are not silently discarded. Back up the file and filesystem before PC recovery. CRC/commit checks do not promise atomic physical sector writes; real Supercard power-loss behavior is unverified.
 
 ## Runtime budgets and evidence
 
-The dictionary screen exclusively borrows the inactive persistent TXT candidate FIL; no TXT load/save runs until the catalog is destroyed. A failed close retains its existing quarantine flag for the next borrower, including across screen exit. No additional persistent sector-sized FIL is allocated. One 256-byte read cache buffers indexed FatFS reads. Base prefix lookup uses two binary searches: O(log N) record comparisons, not a full scan. Each record fetch reads at most 193 string bytes, an index cell and one record cell. Additions use a bounded 512-element 16-bit matching-slot index; query changes scan only the append area (at most 106,496 bytes), not the base and not every rendering frame. Visible result rows are cached by the screen. These limits are explicit trade-offs, not physical flashcard speed claims.
+The dictionary screen exclusively borrows the inactive persistent TXT candidate FIL; no TXT load/save runs until the catalog is destroyed. A failed close retains its existing quarantine flag for the next borrower, including across screen exit. No additional persistent sector-sized FIL is allocated. One 256-byte read cache buffers indexed FatFS reads. Base prefix lookup uses two binary searches: O(log N) record comparisons, not a full scan. Each record fetch reads at most 193 string bytes, an index cell and one record cell. Additions use a bounded 512-element 16-bit matching-slot index; query changes scan only the append area (at most 106,496 bytes), not the base and not every rendering frame. The persistent overlay match index remains 512 16-bit physical-slot ordinals. A bounded temporary 512-entry canonical-identity table collapses revisions and validates targets while reading only the append log. A separate 512-entry 32-bit sparse rank index suppresses affected base matches. For affected base rows whose original key matches the prefix, their rank is found by binary search over the selected directional index, using the canonical row ordinal to break duplicate-key ties. Thus no query or mutation scans the entire base. Temporary identity and sparse-rank tables use separate bounded stack frames, not extra permanent EWRAM; the existing reserve and stack gates remain unchanged. The RAM identity reconciliation is bounded quadratic in the 512-slot limit; no claim of logarithmic overlay CPU work is made. Visible result rows are cached by the screen. These limits are explicit trade-offs, not physical flashcard speed claims.
 
 `bash tests/run_dictionary_tests.sh` tests 40,010 synthetic base rows in both directions, reports production host-backed FatFS API read calls/bytes/seeks/writes, validates canonical selection and additions, covers every partial append boundary and every single-byte slot mutation, faults and retries, and 24-file discovery. `--sanitize` enables ASan/UBSan for the pure parser and production adapter tests. `tests/check_entry_memory.py` retains the existing 20 KiB EWRAM and conservative application stack gates. Neither host wall-clock measurements nor host-backed API files certify actual SD or FAT sector durability.
 

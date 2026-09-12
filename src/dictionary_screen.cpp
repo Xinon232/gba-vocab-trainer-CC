@@ -72,7 +72,7 @@ bool add_to_dictionary(Canvas& p,Dictionary d){
 }
 }
 
-bool run_dictionary_screen(Renderer& renderer,VocabFile* target,DictionaryResult& result) {
+static __attribute__((noinline)) bool dictionary_screen_inner(Renderer& renderer,VocabFile* target,DictionaryResult& result,DictionarySearch& search) {
  additions.set_available(vocab_file_sd_ready());
  char visible_rows[2][2][192];
  const PairMetadata* filter=target?&target->languages:nullptr;
@@ -90,7 +90,7 @@ bool run_dictionary_screen(Renderer& renderer,VocabFile* target,DictionaryResult
    Dictionary d=catalog.dictionary(eligible[choice]);
    bool pair_prompt=target&&!target->languages.present()&&!chooser;
    if(filter&&filter->present())side=catalog.match(eligible[choice],filter->front,filter->back);
-   DictionarySearch search(additions);search.open(d);search.search(side,"");uint32_t selected=0;
+   search.open(d);search.search(side,"");uint32_t selected=0;
    query.open_lookup(!target);char previous[192]={};bool refresh=true;uint32_t cached_top=~0u;
    while(!done) {
     auto held=keys();
@@ -185,6 +185,12 @@ bool run_dictionary_screen(Renderer& renderer,VocabFile* target,DictionaryResult
   }
  }
  bn::core::update();bn::core::update();renderer.reset();return picked;
+}
+
+bool run_dictionary_screen(Renderer& renderer,VocabFile* target,DictionaryResult& result) {
+ // Separate bounded index and canvas frames; no permanent EWRAM allocation.
+ DictionarySearch search(additions);
+ return dictionary_screen_inner(renderer,target,result,search);
 }
 
 bool dictionary_accept_pair(Renderer& renderer,VocabFile& vf,DictionaryResult& result) {
